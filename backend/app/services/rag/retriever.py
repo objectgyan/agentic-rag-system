@@ -1,0 +1,194 @@
+"""Hybrid retriever: dense vector search + BM25 sparse search + re-ranking."""
+
+from typing import List, Optional, Dict, Any
+from dataclasses import dataclass
+import numpy as np
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text as sa_text
+from rank_bm25 import BM25Okapi
+from app.models.chunk import Chunk
+from app.services.rag.embedder import EmbeddingService
+from app.core.config import settings
+
+
+@dataclass
+class RetrievedChunk:
+    chunk_id: str
+    document_id: str
+    content: str
+    score: float
+    page_number: Optional[int] = None
+    section_title: Optional[str] = None
+    metadata: Optional[dict] = None
+
+
+class HybridRetriever:
+    """Combines dense vector search, BM25 sparse search, and cross-encoder re-ranking."""
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        tenant_id: str,
+        embedding_service: Optional[EmbeddingService] = None,
+    ):
+        self.db = db
+        self.tenant_id = tenant_id
+        self.embedder = embedding_service or EmbeddingService()
+
+    async def retrieve(
+        self,
+        query: str,
+        collection_ids: Optional[List[str]] = None,
+        top_k: int = 5,
+        use_reranking: bool = True,
+        dense_weight: float = 0.7,
+        sparse_weight: float = 0.3,
+    ) -> List[RetrievedChunk]:
+        """Hybrid retrieval with fusion scoring."""
+        # Get candidates from both methods
+        dense_results = await self._dense_search(query, collection_ids, top_k=top_k * 3)
+        sparse_results = await self._sparse_search(query, collection_ids, top_k=top_k * 3)
+
+        # Reciprocal Rank Fusion
+        fused = self._rrf_fusion(dense_results, sparse_results, dense_weight, sparse_weight)
+
+        # Re-rank if enabled
+        if use_reranking and fused:
+            fused = await self._rerank(query, fused, top_k)
+        else:
+            fused = fused[:top_k]
+
+        return fused
+
+    async def _dense_search(
+        self, query: str, collection_ids: Optional[List[str]], top_k: int
+    ) -> List[RetrievedChunk]:
+        """Vector similarity search using pgvector."""
+        query_embedding = await self.embedder.embed_query(query)
+
+        # Build query with pgvector cosine distance
+        conditions = ["c.tenant_id = :tenant_id", "c.embedding IS NOT NULL"]
+        params: dict = {"tenant_id": self.tenant_id, "top_k": top_k}
+
+        if collection_ids:
+            conditions.append("c.collection_id = ANY(:collection_ids)")
+            params["collection_ids"] = collection_ids
+
+        where_clause = " AND ".join(conditions)
+        embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+
+        sql = f"""
+            SELECT c.id, c.document_id, c.content, c.page_number, c.section_title,
+                   1 - (c.embedding <=> '{embedding_str}'::vector) as score
+            FROM chunks c
+            WHERE {where_clause}
+            ORDER BY c.embedding <=> '{embedding_str}'::vector
+            LIMIT :top_k
+        """
+
+        result = await self.db.execute(sa_text(sql), params)
+        rows = result.fetchall()
+
+        return [
+            RetrievedChunk(
+                chunk_id=str(row[0]),
+                document_id=str(row[1]),
+                content=row[2],
+                score=float(row[5]) if row[5] else 0.0,
+                page_number=row[3],
+                section_title=row[4],
+            )
+            for row in rows
+        ]
+
+    async def _sparse_search(
+        self, query: str, collection_ids: Optional[List[str]], top_k: int
+    ) -> List[RetrievedChunk]:
+        """BM25 sparse retrieval. Loads candidate chunks and scores locally."""
+        conditions = [Chunk.tenant_id == self.tenant_id]
+        if collection_ids:
+            conditions.append(Chunk.collection_id.in_(collection_ids))
+
+        result = await self.db.execute(
+            select(Chunk).where(*conditions).limit(1000)
+        )
+        chunks = result.scalars().all()
+
+        if not chunks:
+            return []
+
+        # Build BM25 index
+        tokenized = [c.content.lower().split() for c in chunks]
+        bm25 = BM25Okapi(tokenized)
+        scores = bm25.get_scores(query.lower().split())
+
+        # Get top-k
+        top_indices = np.argsort(scores)[::-1][:top_k]
+        return [
+            RetrievedChunk(
+                chunk_id=str(chunks[i].id),
+                document_id=str(chunks[i].document_id),
+                content=chunks[i].content,
+                score=float(scores[i]),
+                page_number=chunks[i].page_number,
+                section_title=chunks[i].section_title,
+            )
+            for i in top_indices
+            if scores[i] > 0
+        ]
+
+    def _rrf_fusion(
+        self,
+        dense: List[RetrievedChunk],
+        sparse: List[RetrievedChunk],
+        dense_weight: float,
+        sparse_weight: float,
+        k: int = 60,
+    ) -> List[RetrievedChunk]:
+        """Reciprocal Rank Fusion to combine dense and sparse results."""
+        scores: Dict[str, float] = {}
+        chunk_map: Dict[str, RetrievedChunk] = {}
+
+        for rank, chunk in enumerate(dense):
+            scores[chunk.chunk_id] = scores.get(chunk.chunk_id, 0) + dense_weight / (k + rank + 1)
+            chunk_map[chunk.chunk_id] = chunk
+
+        for rank, chunk in enumerate(sparse):
+            scores[chunk.chunk_id] = scores.get(chunk.chunk_id, 0) + sparse_weight / (k + rank + 1)
+            if chunk.chunk_id not in chunk_map:
+                chunk_map[chunk.chunk_id] = chunk
+
+        sorted_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
+        results = []
+        for cid in sorted_ids:
+            chunk = chunk_map[cid]
+            chunk.score = scores[cid]
+            results.append(chunk)
+        return results
+
+    async def _rerank(
+        self, query: str, chunks: List[RetrievedChunk], top_k: int
+    ) -> List[RetrievedChunk]:
+        """Re-rank using Cohere cross-encoder."""
+        if not settings.cohere_api_key:
+            return chunks[:top_k]
+
+        try:
+            import cohere
+            client = cohere.AsyncClient(api_key=settings.cohere_api_key)
+
+            response = await client.rerank(
+                model=settings.default_reranker_model,
+                query=query,
+                documents=[c.content for c in chunks],
+                top_n=top_k,
+            )
+
+            reranked = []
+            for r in response.results:
+                chunk = chunks[r.index]
+                chunk.score = r.relevance_score
+                reranked.append(chunk)
+            return reranked
+        except Exception:
+            return chunks[:top_k]
