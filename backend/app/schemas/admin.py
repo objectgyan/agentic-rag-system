@@ -24,6 +24,13 @@ class UserManageRequest(BaseModel):
     is_active: Optional[bool] = None
 
 
+class UserCreateRequest(BaseModel):
+    email: str
+    password: str
+    full_name: Optional[str] = None
+    role: str = "member"  # member, admin
+
+
 class AuditLogEntry(BaseModel):
     id: UUID
     user_id: Optional[UUID]

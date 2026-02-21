@@ -184,6 +184,53 @@ class AudioExtractor:
         )
 
 
+class VideoExtractor:
+    """Extract text from video by transcribing audio track."""
+
+    async def extract(self, data: bytes, filename: str = "video.mp4") -> ExtractedContent:
+        import openai
+        import tempfile
+        import subprocess
+        from pathlib import Path
+        from app.core.config import settings
+
+        # Save video to temp file
+        with tempfile.NamedTemporaryFile(suffix=Path(filename).suffix, delete=False) as video_file:
+            video_file.write(data)
+            video_path = video_file.name
+
+        # Extract audio using ffmpeg
+        audio_path = video_path.replace(Path(filename).suffix, ".mp3")
+        try:
+            subprocess.run(
+                ["ffmpeg", "-i", video_path, "-vn", "-acodec", "mp3", "-ab", "128k", "-ar", "44100", "-y", audio_path],
+                check=True,
+                capture_output=True,
+            )
+
+            # Transcribe audio with Whisper
+            client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+            with open(audio_path, "rb") as audio_file:
+                response = await client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="verbose_json",
+                )
+
+            return ExtractedContent(
+                text=response.text,
+                metadata={
+                    "duration": getattr(response, "duration", None),
+                    "language": getattr(response, "language", None),
+                    "extraction_method": "video_audio_transcription",
+                },
+            )
+        finally:
+            # Cleanup temp files
+            Path(video_path).unlink(missing_ok=True)
+            Path(audio_path).unlink(missing_ok=True)
+
+
 class URLExtractor:
     """Extract content from web URLs."""
 
@@ -191,15 +238,49 @@ class URLExtractor:
         import httpx
         from bs4 import BeautifulSoup
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        }
+
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30, headers=headers) as client:
             response = await client.get(url)
             response.raise_for_status()
 
-        soup = BeautifulSoup(response.content, "html.parser")
+        # Manually decode content to avoid BeautifulSoup encoding issues
+        # Try multiple encodings and pick the one that works
+        html_text = None
+        for encoding in [response.encoding, 'utf-8', 'iso-8859-1', 'windows-1252', 'latin-1']:
+            if encoding:
+                try:
+                    html_text = response.content.decode(encoding, errors='strict')
+                    break  # Success, use this encoding
+                except (UnicodeDecodeError, LookupError):
+                    continue
+        
+        # If all else fails, use UTF-8 with ignore errors
+        if html_text is None:
+            html_text = response.content.decode('utf-8', errors='ignore')
+        
+        # Now parse the properly decoded text
+        soup = BeautifulSoup(html_text, "html.parser")
+        
         for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
             tag.decompose()
 
         text = soup.get_text(separator="\n", strip=True)
+        
+        # Clean up excessive whitespace and newlines
+        import re
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Replace 3+ newlines with 2
+        text = re.sub(r' +', ' ', text)  # Replace multiple spaces with single space
+        text = text.strip()
+        
         title = soup.title.string if soup.title else url
 
         return ExtractedContent(

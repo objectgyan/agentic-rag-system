@@ -25,6 +25,25 @@ export default function ChatPage() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
+  // Check if citations should be shown based on answer content
+  const shouldShowCitations = (content: string): boolean => {
+    const lowerContent = content.toLowerCase();
+    const noInfoPhrases = [
+      'does not contain',
+      'do not contain',
+      'cannot provide',
+      'no information',
+      'not mentioned',
+      'does not mention',
+      'i don\'t have',
+      'there is no information',
+      'not found in the context',
+      'context doesn\'t',
+      'context does not',
+    ];
+    return !noInfoPhrases.some(phrase => lowerContent.includes(phrase));
+  };
+
   const handleSend = async () => {
     if (!input.trim() || isStreaming) return;
     const query = input.trim();
@@ -143,7 +162,7 @@ export default function ChatPage() {
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
                 {msg.isStreaming && <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />}
-                {msg.citations && msg.citations.length > 0 && (
+                {msg.citations && msg.citations.length > 0 && shouldShowCitations(msg.content) && (
                   <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                     <p className="text-xs font-medium mb-1 opacity-70">Sources:</p>
                     <div className="flex flex-wrap gap-1">

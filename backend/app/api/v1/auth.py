@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.models.api_key import ApiKey
+from app.core.audit import create_audit_log
 from app.schemas.auth import (
     RegisterRequest, LoginRequest, TokenResponse, RefreshRequest,
     UserResponse, ApiKeyCreateRequest, ApiKeyResponse,
@@ -74,6 +75,14 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     from datetime import datetime, timezone
     user.last_login = datetime.now(timezone.utc)
     await db.commit()
+    
+    # Create audit log
+    await create_audit_log(
+        db=db,
+        user=user,
+        action="user.login",
+        details={"method": "password"},
+    )
 
     token_data = {"sub": str(user.id), "tenant_id": str(tenant.id), "tier": tenant.tier, "role": user.role}
     return TokenResponse(

@@ -82,7 +82,7 @@ class ChunkingService:
                 ))
                 idx += 1
                 # Overlap: include last sentence of previous chunk
-                sentences = re._split_pattern(r"(?<=[.!?])\s+", current)
+                sentences = re.split(r"(?<=[.!?])\s+", current)
                 overlap = sentences[-1] if sentences else ""
                 current = f"{overlap}\n\n{para}" if overlap else para
             else:

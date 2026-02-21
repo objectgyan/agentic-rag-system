@@ -1,7 +1,8 @@
 """Main RAG pipeline orchestrating retrieval, enhancement, and generation."""
 
 import time
-from typing import List, Optional, Dict, Any, AsyncIterator
+import re
+from typing import List, Optional, Dict, Any, AsyncIterator, Set
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.rag.retriever import HybridRetriever, RetrievedChunk
 from app.services.rag.embedder import EmbeddingService
@@ -20,6 +21,12 @@ class RAGPipeline:
         self.embedder = EmbeddingService()
         self.retriever = HybridRetriever(db=db, tenant_id=tenant_id, embedding_service=self.embedder)
         self.query_enhancer = QueryEnhancer()
+
+    def _extract_cited_sources(self, answer: str) -> Set[int]:
+        """Extract which [Source N] numbers were actually cited in the answer."""
+        pattern = r'\[Source\s+(\d+)\]'
+        matches = re.findall(pattern, answer, re.IGNORECASE)
+        return set(int(m) for m in matches)
 
     async def query(
         self,
@@ -72,24 +79,28 @@ class RAGPipeline:
         generator = GenerationService(model=model, temperature=temperature)
         result = await generator.generate(query, all_chunks)
 
-        # Build citations
+        # Build citations - only for sources actually cited in the answer
         citations = []
         if include_citations:
+            cited_source_nums = self._extract_cited_sources(result["answer"])
             from app.models.document import Document
             from sqlalchemy import select
-            for chunk in all_chunks:
-                doc_result = await self.db.execute(
-                    select(Document).where(Document.id == chunk.document_id)
-                )
-                doc = doc_result.scalar_one_or_none()
-                citations.append({
-                    "document_id": chunk.document_id,
-                    "document_name": doc.original_filename if doc else "Unknown",
-                    "chunk_id": chunk.chunk_id,
-                    "content": chunk.content[:300],
-                    "page_number": chunk.page_number,
-                    "score": chunk.score,
-                })
+            
+            for i, chunk in enumerate(all_chunks, 1):
+                # Only include if this source was actually cited in the answer
+                if i in cited_source_nums:
+                    doc_result = await self.db.execute(
+                        select(Document).where(Document.id == chunk.document_id)
+                    )
+                    doc = doc_result.scalar_one_or_none()
+                    citations.append({
+                        "document_id": chunk.document_id,
+                        "document_name": doc.original_filename if doc else "Unknown",
+                        "chunk_id": chunk.chunk_id,
+                        "content": chunk.content[:300],
+                        "page_number": chunk.page_number,
+                        "score": chunk.score,
+                    })
 
         result["citations"] = citations
         result["retrieval_time_ms"] = retrieval_time
@@ -114,8 +125,48 @@ class RAGPipeline:
         )
 
         generator = GenerationService(model=model, temperature=temperature)
+        
+        # Accumulate the full answer to determine which sources were actually cited
+        full_answer = ""
+        
         async for token in generator.generate_stream(query, chunks):
+            # Skip the initial citations - we'll send filtered ones at the end
+            if token.get("type") == "citations":
+                continue
+            
+            # Accumulate answer text
+            if token.get("type") == "token":
+                full_answer += token.get("content", "")
+            
             yield token
+        
+        # Now send filtered citations based on what was actually cited
+        cited_source_nums = self._extract_cited_sources(full_answer)
+        if cited_source_nums:
+            from app.models.document import Document
+            from sqlalchemy import select
+            
+            enriched_citations = []
+            for i, chunk in enumerate(chunks, 1):
+                if i in cited_source_nums:
+                    doc_result = await self.db.execute(
+                        select(Document).where(Document.id == chunk.document_id)
+                    )
+                    doc = doc_result.scalar_one_or_none()
+                    enriched_citations.append({
+                        "chunk_id": chunk.chunk_id,
+                        "document_id": chunk.document_id,
+                        "document_name": doc.original_filename if doc else "Unknown",
+                        "content": chunk.content[:200],
+                        "score": chunk.score,
+                        "page_number": chunk.page_number,
+                    })
+            
+            if enriched_citations:
+                yield {
+                    "type": "citations",
+                    "citations": enriched_citations,
+                }
 
     async def _track_usage(self, tokens: Optional[int], model: Optional[str]):
         """Record usage for billing and limits."""

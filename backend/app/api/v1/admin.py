@@ -8,11 +8,14 @@ from app.models.user import User
 from app.models.tenant import Tenant, TenantTier
 from app.models.usage import UsageRecord
 from app.models.audit_log import AuditLog
-from app.schemas.admin import UsageStats, TierUpdateRequest, UserManageRequest, AuditLogEntry
+from app.schemas.admin import UsageStats, TierUpdateRequest, UserManageRequest, UserCreateRequest, AuditLogEntry
 from app.api.deps.auth import require_admin
 from uuid import UUID
 from typing import List
 from datetime import datetime, timezone
+from app.core.security import hash_password
+from app.models.user import UserRole
+from app.core.audit import create_audit_log
 
 router = APIRouter()
 
@@ -55,6 +58,24 @@ async def get_usage(
     )
 
 
+@router.get("/tenant")
+async def get_tenant_info(
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get tenant information."""
+    result = await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))
+    tenant = result.scalar_one()
+    return {
+        "id": str(tenant.id),
+        "name": tenant.name,
+        "slug": tenant.slug,
+        "tier": tenant.tier if isinstance(tenant.tier, str) else tenant.tier.value,
+        "is_active": tenant.is_active,
+        "created_at": tenant.created_at.isoformat(),
+    }
+
+
 @router.patch("/tier")
 async def update_tier(
     req: TierUpdateRequest,
@@ -64,12 +85,26 @@ async def update_tier(
     """Update the tenant's tier."""
     result = await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))
     tenant = result.scalar_one()
+    old_tier = tenant.tier if isinstance(tenant.tier, str) else tenant.tier.value
+    
     try:
         from app.models.tenant import TenantTier
         tenant.tier = TenantTier(req.tier).value
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid tier: {req.tier}")
+    
     await db.commit()
+    
+    # Create audit log
+    await create_audit_log(
+        db=db,
+        user=user,
+        action="tenant.tier_updated",
+        resource_type="tenant",
+        resource_id=str(tenant.id),
+        details={"old_tier": old_tier, "new_tier": req.tier},
+    )
+    
     return {"status": "updated", "tier": tenant.tier}
 
 
@@ -88,13 +123,67 @@ async def list_users(
             "id": str(u.id),
             "email": u.email,
             "full_name": u.full_name,
-            "role": u.role.value,
+            "role": u.role if isinstance(u.role, str) else u.role.value,
             "is_active": u.is_active,
             "created_at": u.created_at.isoformat(),
             "last_login": u.last_login.isoformat() if u.last_login else None,
         }
         for u in users
     ]
+
+
+@router.post("/users")
+async def create_user(
+    req: UserCreateRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new user in the tenant."""
+    # Check if user already exists
+    result = await db.execute(
+        select(User).where(User.email == req.email, User.tenant_id == admin.tenant_id)
+    )
+    existing_user = result.scalar_one_or_none()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User with this email already exists")
+    
+    # Validate role
+    try:
+        user_role = UserRole(req.role)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid role: {req.role}")
+    
+    # Create new user
+    new_user = User(
+        email=req.email,
+        hashed_password=hash_password(req.password),
+        full_name=req.full_name,
+        role=user_role.value,
+        tenant_id=admin.tenant_id,
+        is_active=True,
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    
+    # Create audit log
+    await create_audit_log(
+        db=db,
+        user=admin,
+        action="user.created",
+        resource_type="user",
+        resource_id=str(new_user.id),
+        details={"email": new_user.email, "role": new_user.role if isinstance(new_user.role, str) else new_user.role.value},
+    )
+    
+    return {
+        "id": str(new_user.id),
+        "email": new_user.email,
+        "full_name": new_user.full_name,
+        "role": new_user.role if isinstance(new_user.role, str) else new_user.role.value,
+        "is_active": new_user.is_active,
+        "created_at": new_user.created_at.isoformat(),
+    }
 
 
 @router.patch("/users/{user_id}")

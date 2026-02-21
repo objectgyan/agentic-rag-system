@@ -10,6 +10,7 @@ from app.models.collection import Collection, CollectionVisibility
 from app.models.document import Document
 from app.schemas.collection import CollectionCreate, CollectionUpdate, CollectionResponse
 from app.api.deps.auth import get_current_user, require_member
+from app.core.audit import create_audit_log
 from app.core.config import TierLimits
 
 router = APIRouter()
@@ -51,6 +52,16 @@ async def create_collection(
     db.add(collection)
     await db.commit()
     await db.refresh(collection)
+    
+    # Create audit log
+    await create_audit_log(
+        db=db,
+        user=user,
+        action="collection.created",
+        resource_type="collection",
+        resource_id=str(collection.id),
+        details={"name": collection.name},
+    )
 
     resp = CollectionResponse.model_validate(collection)
     resp.document_count = 0

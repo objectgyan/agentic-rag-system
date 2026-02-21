@@ -111,7 +111,10 @@ export const agentsApi = {
 // Admin
 export const adminApi = {
   usage: (period?: string) => api.get<UsageStats>('/admin/usage', { params: { period } }),
+  tenant: () => api.get('/admin/tenant'),
   users: () => api.get('/admin/users'),
+  createUser: (data: { email: string; password: string; full_name?: string; role?: string }) =>
+    api.post('/admin/users', data),
   updateUser: (id: string, data: { role?: string; is_active?: boolean }) =>
     api.patch(`/admin/users/${id}`, data),
   updateTier: (tier: string) => api.patch('/admin/tier', { tier }),

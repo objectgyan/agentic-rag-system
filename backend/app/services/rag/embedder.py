@@ -43,12 +43,28 @@ class EmbeddingService:
     async def _embed_openai(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using OpenAI API."""
         import openai
+        import tiktoken
+        
         client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        
+        # Tokenizer for the embedding model
+        encoding = tiktoken.get_encoding("cl100k_base")
+        max_tokens = 8191  # OpenAI embedding models have 8191 token limit
+        
+        # Truncate texts that are too long
+        processed_texts = []
+        for text in texts:
+            tokens = encoding.encode(text)
+            if len(tokens) > max_tokens:
+                # Truncate to max tokens
+                truncated_tokens = tokens[:max_tokens]
+                text = encoding.decode(truncated_tokens)
+            processed_texts.append(text)
 
         # Batch in chunks of 100
         all_embeddings = []
-        for i in range(0, len(texts), 100):
-            batch = texts[i:i + 100]
+        for i in range(0, len(processed_texts), 100):
+            batch = processed_texts[i:i + 100]
             response = await client.embeddings.create(
                 model=self.model,
                 input=batch,

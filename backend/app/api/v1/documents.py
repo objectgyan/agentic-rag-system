@@ -13,6 +13,7 @@ from app.models.document import Document, DocumentStatus, DocumentType
 from app.models.collection import Collection, CollectionVisibility
 from app.schemas.document import DocumentUploadResponse, DocumentResponse, DocumentURLIngest
 from app.api.deps.auth import get_current_user, require_member
+from app.core.audit import create_audit_log
 
 router = APIRouter()
 
@@ -116,6 +117,16 @@ async def upload_documents(
         print(f"[DEBUG] About to commit transaction")
         await db.commit()
         print(f"[DEBUG] Transaction committed successfully")
+        
+        # Create audit log
+        await create_audit_log(
+            db=db,
+            user=user,
+            action="documents.uploaded",
+            resource_type="collection",
+            resource_id=str(collection_id),
+            details={"count": len(files), "filenames": [f.filename for f in files]},
+        )
         
         # Trigger async processing after commit
         print(f"[DEBUG] Queuing Celery tasks for {len(doc_ids)} documents")
