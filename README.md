@@ -59,8 +59,10 @@
 - **User-Level Privacy**: Private collections within tenants
 - **Auth**: JWT + OAuth2 (Google, GitHub SSO)
 - **RBAC**: Admin, Member, Viewer roles with granular permissions
+- **User Management**: Create and manage tenant users with role assignment
 - **API Keys**: Per-tenant API key management
-- **Audit Logging**: Full action audit trail
+- **Audit Logging**: Comprehensive audit trail for all administrative actions (user creation, login, document uploads, collection creation, tier changes)
+- **Tier Management**: Visual interface for upgrading/downgrading tenant tiers with real-time feature comparison
 
 ### Production Ready
 - **Streaming**: SSE + WebSocket real-time responses
@@ -278,9 +280,19 @@ tiers:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/v1/admin/usage` | Tenant usage stats |
-| GET | `/api/v1/admin/users` | Manage users |
+| GET | `/api/v1/admin/tenant` | Get tenant details |
+| GET | `/api/v1/admin/users` | List tenant users |
+| POST | `/api/v1/admin/users` | Create new user with role |
 | PATCH | `/api/v1/admin/tier` | Update tenant tier |
 | GET | `/api/v1/admin/audit-log` | Audit trail |
+
+#### Audit Log Actions
+The system automatically logs the following actions:
+- `user.login` - User authentication
+- `user.created` - New user creation
+- `documents.uploaded` - Document upload with count and filenames
+- `collection.created` - Collection creation
+- `tenant.tier_updated` - Tier changes with old/new values
 
 ---
 
@@ -292,7 +304,11 @@ tiers:
 - **Real-time Chat**: WebSocket-powered conversational UI with streaming
 - **Document Manager**: Drag-and-drop upload, progress tracking, preview
 - **Collection Browser**: Visual collection management with search
-- **Settings Dashboard**: Tenant config, user management, API keys
+- **Settings Dashboard**: 
+  - **API Keys**: Manage tenant API keys
+  - **Account**: Visual tier management with one-click upgrade/downgrade and feature comparison
+  - **Users**: Create and manage tenant users with role assignment (Admin/Member/Viewer)
+  - **Audit Log**: Real-time audit trail of all administrative actions
 - **Usage Analytics**: Charts showing usage by tier limits
 
 ### Tech Stack
@@ -327,6 +343,8 @@ Collections can be set to `private` (owner-only), `shared` (org-wide), or `publi
 | Query / Chat | ✅ | ✅ | ✅ |
 | View analytics | ✅ | ✅ | ❌ |
 | Manage API keys | ✅ | ❌ | ❌ |
+| View audit logs | ✅ | ❌ | ❌ |
+| Manage tenant tier | ✅ | ❌ | ❌ |
 | Delete org data | ✅ | ❌ | ❌ |
 
 ---
