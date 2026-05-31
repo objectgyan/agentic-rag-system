@@ -1,12 +1,14 @@
 """Document upload and management endpoints."""
 
+import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
 from typing import List
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.storage import upload_file
 from app.models.user import User
 from app.models.document import Document, DocumentStatus, DocumentType
@@ -15,7 +17,33 @@ from app.api.deps.auth import get_current_user, require_member
 from app.api.deps.access import assert_collection_accessible
 from app.core.audit import create_audit_log
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+async def read_upload_capped(file: UploadFile, max_bytes: int) -> bytes:
+    """Read an UploadFile into memory, aborting once it exceeds ``max_bytes`` (F7).
+
+    ``await file.read()`` reads the entire upload with no bound — a single large file
+    can exhaust memory/disk. Reading in chunks and stopping at the cap means a hostile
+    upload is rejected with 413 after at most ``max_bytes`` are buffered, not gigabytes.
+    """
+    chunks: List[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)  # 1 MiB at a time
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File '{file.filename}' exceeds the "
+                f"{max_bytes // (1024 * 1024)} MB upload limit",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 MIME_TO_DOCTYPE = {
     "application/pdf": DocumentType.PDF,
@@ -62,21 +90,16 @@ async def upload_documents(
     # Verify collection access: tenant scope + private-owner enforcement (F2).
     await assert_collection_accessible(db, user, collection_id)
 
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    responses = []
+    doc_ids = []
     try:
-        print(f"[DEBUG] Starting upload for {len(files)} files")
-        responses = []
-        doc_ids = []
         for file in files:
-            print(f"[DEBUG] Processing file: {file.filename}")
-            content = await file.read()
-            print(f"[DEBUG] File read complete, size: {len(content)}")
+            content = await read_upload_capped(file, max_bytes)
             file_id = str(uuid.uuid4())
             storage_path = f"{user.tenant_id}/{collection_id}/{file_id}/{file.filename}"
 
-            # Upload to object storage
-            print(f"[DEBUG] Uploading to MinIO: {storage_path}")
             upload_file(storage_path, content, file.content_type or "application/octet-stream")
-            print(f"[DEBUG] MinIO upload complete")
 
             doc_type = detect_doc_type(file.content_type or "", file.filename)
             doc = Document(
@@ -91,18 +114,12 @@ async def upload_documents(
                 mime_type=file.content_type,
             )
             db.add(doc)
-            print(f"[DEBUG] Document added to session")
             await db.flush()
-            print(f"[DEBUG] Database flushed, doc_id: {doc.id}")
-            
             doc_ids.append(str(doc.id))
             responses.append(DocumentUploadResponse.model_validate(doc))
 
-        print(f"[DEBUG] About to commit transaction")
         await db.commit()
-        print(f"[DEBUG] Transaction committed successfully")
-        
-        # Create audit log
+
         await create_audit_log(
             db=db,
             user=user,
@@ -111,27 +128,29 @@ async def upload_documents(
             resource_id=str(collection_id),
             details={"count": len(files), "filenames": [f.filename for f in files]},
         )
-        
-        # Trigger async processing after commit
-        print(f"[DEBUG] Queuing Celery tasks for {len(doc_ids)} documents")
-        from app.services.processing.tasks import process_document
-        for doc_id in doc_ids:
-            try:
-                print(f"[DEBUG] Queuing task for {doc_id}")
-                process_document.delay(doc_id)
-                print(f"[DEBUG] Task queued for {doc_id}")
-            except Exception as e:
-                # Log but don't fail the request if task queuing fails
-                print(f"Failed to queue task for document {doc_id}: {e}")
-        
-        print(f"[DEBUG] Returning response")
-        return responses
-    except Exception as e:
-        print(f"[DEBUG] EXCEPTION during upload: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+    except HTTPException:
+        # Client errors (403 access, 413 too-large): roll back and propagate as-is.
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        raise
+    except Exception:
+        # Unexpected server error: log the detail server-side, return a generic 500
+        # (don't leak internal exception text to the client).
+        await db.rollback()
+        logger.exception(
+            "document upload failed (tenant=%s collection=%s)", user.tenant_id, collection_id
+        )
+        raise HTTPException(status_code=500, detail="Upload failed")
+
+    # Queue async processing only after the transaction has committed. A queue failure
+    # must not fail the request — the document is saved and can be reprocessed.
+    from app.services.processing.tasks import process_document
+    for doc_id in doc_ids:
+        try:
+            process_document.delay(doc_id)
+        except Exception:
+            logger.warning("failed to queue processing for document %s", doc_id, exc_info=True)
+
+    return responses
 
 
 @router.post("/url", response_model=DocumentUploadResponse)
