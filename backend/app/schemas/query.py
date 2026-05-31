@@ -18,6 +18,8 @@ class QueryRequest(BaseModel):
     use_reranking: bool = True
     use_hyde: bool = False
     use_multi_query: bool = False
+    # Distill retrieved chunks to only query-relevant content before generation (A2).
+    use_compression: bool = False
     filters: Optional[dict] = None
     include_citations: bool = True
     # Opt-in: run the RAG evaluator over the answer (extra LLM calls) and return scores (C3).

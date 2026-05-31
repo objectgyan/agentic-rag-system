@@ -115,6 +115,7 @@ async def query(
             include_citations=req.include_citations,
             conversation_history=history,
             evaluate=req.evaluate,
+            use_compression=req.use_compression,
         )
     except Exception:
         rag_queries_total.labels(status="error").inc()

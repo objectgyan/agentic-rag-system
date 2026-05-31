@@ -104,6 +104,8 @@ class Settings(BaseSettings):
     default_embedding_dimensions: int = 1536
     default_llm_model: str = "gpt-4o"
     default_reranker_model: str = "rerank-english-v3.0"
+    # Cheap, fast model for contextual compression — a simple extraction task (A2).
+    default_compression_model: str = "gpt-4o-mini"
 
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"

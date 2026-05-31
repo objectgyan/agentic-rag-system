@@ -46,6 +46,7 @@ class RAGPipeline:
         include_citations: bool = True,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         evaluate: bool = False,
+        use_compression: bool = False,
     ) -> Dict[str, Any]:
         """Execute a full RAG query."""
         retrieval_start = time.time()
@@ -90,6 +91,17 @@ class RAGPipeline:
             all_chunks = await self.retriever.retrieve(
                 search_query, collection_ids=collection_ids, top_k=top_k, use_reranking=use_reranking
             )
+
+        # Contextual compression (A2): distill chunks to query-relevant content before
+        # generation. Optional and fail-soft — on error we keep the raw chunks.
+        if use_compression and all_chunks:
+            try:
+                from app.services.rag.compressor import ContextualCompressor
+
+                all_chunks = await ContextualCompressor().compress(query, all_chunks)
+            except Exception:
+                logger.warning("contextual compression failed; using raw chunks", exc_info=True)
+                degraded.append("compression")
 
         retrieval_time = (time.time() - retrieval_start) * 1000
 
