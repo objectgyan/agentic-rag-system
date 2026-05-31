@@ -404,12 +404,17 @@ agent = AgentExecutor(
 ## 🚢 Deployment
 
 ### Docker Compose (Recommended)
+The production compose runs non-root containers, no `--reload`, restart policies,
+healthchecks, and keeps Postgres/Redis/MinIO off the host network. It sets
+`APP_ENV=production`, so the app refuses to boot unless you provide a strong
+`JWT_SECRET` and non-default MinIO/Postgres credentials in `.env`.
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ### Kubernetes
-Helm charts available in `/deploy/helm/`.
+Helm charts are not included yet (roadmap). For now, deploy with the production
+compose file above, or translate it to manifests with a tool like `kompose`.
 
 ### Environment Checklist
 - [ ] Set strong `JWT_SECRET`
