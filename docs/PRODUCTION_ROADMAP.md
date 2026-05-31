@@ -219,7 +219,10 @@ upload → worker ingest → RAG query with citation) works under the restricted
 
 ## Later phases (sketch — detailed when we reach them)
 
-### Phase 1 — Complete the half-built features (in progress)
+### Phase 1 — Complete the half-built features — ✅ DONE
+
+All four wired and validated live (conversation memory recalls across turns; `/agents/types` only lists
+real tools; `evaluate=true` returns RAG scores; web search is Tavily-or-honestly-unconfigured). 64 tests.
 
 #### C1 — Wire conversation memory into generation
 - **Problem:** `/query` is fully stateless. The `Message` model is never written; `ChatRequest` is
