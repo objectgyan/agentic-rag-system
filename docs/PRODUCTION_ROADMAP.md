@@ -51,7 +51,19 @@ the five chunking strategies, and citation filtering. These are real and well-bu
 Ordered by dependency. Items 0.1 are safe and land first; the RLS enforcement (0.3) is the riskiest and
 lands only after the pieces it depends on are in place and tested.
 
-**Progress:** ✅ 0.1 (F1–F3) · ✅ 0.2 (F4–F8) · ⬜ 0.3 (F9–F10) · ⬜ 0.4 (F11–F13). 44 tests passing.
+**Progress:** ✅ 0.1 (F1–F3) · ✅ 0.2 (F4–F8) · ✅ 0.3 (F9–F10) · ⬜ 0.4 (F11–F13). 46 tests passing.
+
+**RLS is now real — validated live.** App + worker connect as the non-owner `agentrag_app` role;
+direct-DB proof showed `ctx=A` sees only A, an explicit `WHERE tenant=B` returns 0, no-context returns
+0, and a foreign-tenant INSERT raises `InsufficientPrivilegeError`. Full pipeline (register → login →
+upload → worker ingest → RAG query with citation) works under the restricted role.
+
+> **Learning note (corrected during F9):** `FORCE ROW LEVEL SECURITY` does **not** constrain a *superuser*
+> table owner — superusers always bypass RLS (`rolbypassrls`). Our migration role `agentrag` is a
+> superuser, so it still sees everything; that's fine because it's used *only* for DDL. The actual
+> guarantee comes from running the app as a **separate non-owner, non-superuser role** (`agentrag_app`),
+> which makes the existing `ENABLE` policies apply. `FORCE` is kept as defense-in-depth for the
+> non-superuser-owner case, not as the primary control.
 
 ### 0.1 — Safe correctness fixes (no behavior risk) — ✅ DONE
 
@@ -127,7 +139,7 @@ lands only after the pieces it depends on are in place and tested.
   default or too short. Loud failure at startup beats a quiet vulnerability.
 - **Verify:** `APP_ENV=production` with default JWT secret → process exits with a clear error.
 
-### 0.3 — Make RLS real (the keystone — lands last, after 0.1/0.2 + tests)
+### 0.3 — Make RLS real (the keystone) — ✅ DONE
 
 #### F9 — Dedicated non-owner DB role + `FORCE ROW LEVEL SECURITY`
 - **Problem:** As above — the app runs as the table owner, so RLS is bypassed entirely.
