@@ -260,15 +260,17 @@ real tools; `evaluate=true` returns RAG scores; web search is Tavily-or-honestly
 - **Verify:** with no key, the tool/advertisement reflects unavailability; with a key, it returns live
   results.
 
-### Phase 2 — Ops & quality gates
-- **O1** GitHub Actions CI: ruff + mypy (backend), eslint + tsc (frontend), pytest with the test DB.
-- **O2** Custom Prometheus metrics (retrieval/generation latency histograms, query/error counters) — today
-  only the default ASGI app is mounted.
-- **O3** Structured logging actually used in routes/services with request-ID + tenant-ID correlation.
-- **O4** Production Docker: non-root users, drop `--reload`, real `docker-compose.prod.yml`, healthchecks
-  for celery, resource limits, `.dockerignore`. (README references a prod compose + Helm that don't exist —
-  we either build them or correct the README.)
-- **O5** Broaden test coverage (retriever fusion, chunkers, rate limiter, RBAC matrix).
+### Phase 2 — Ops & quality gates (in progress)
+- ✅ **O1** GitHub Actions CI (lint job: ruff; test job: pgvector+redis services, runs migrations + pytest
+  --cov). Added `backend/pyproject.toml` (ruff) and fixed all lint findings.
+- ✅ **O2** Custom Prometheus metrics (`rag_queries_total{status}`, `rag_retrieval_seconds`,
+  `rag_generation_seconds`) on the query path; verified on `/metrics/`. (Worker exporter = follow-up.)
+- ⬜ **O3** Structured logging actually used in routes/services with request-ID + tenant-ID correlation.
+- ✅ **O4** Production Docker: non-root backend (`appuser`) + frontend (nginx-unprivileged), `.dockerignore`
+  for both, standalone `docker-compose.prod.yml` (no `--reload`, restart policies, celery healthcheck,
+  resource limits, internal-only datastores, `APP_ENV=production`). (Helm still not built — README should be
+  corrected to drop that claim, or add charts; tracked for later.)
+- ⬜ **O5** Broaden test coverage (retriever fusion, chunkers already partly covered; RBAC matrix, admin).
 
 ### Phase 3 — The ambitious net-new features (the "AGI-adjacent" learning)
 - **A1** Multi-hop / recursive retrieval (iterative retrieve→reason→retrieve).
