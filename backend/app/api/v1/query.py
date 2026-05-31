@@ -149,9 +149,19 @@ async def query_stream(
     """Execute a RAG query with streaming response (SSE)."""
     # Authorize before the stream starts — a 403 mid-SSE-stream is hard for clients to handle.
     await assert_collections_accessible(db, user, req.collection_ids)
+
+    # Conversation memory for the streaming path too (C1): load history up front, and
+    # persist both turns once the stream finishes.
+    conversation = None
+    history = None
+    if req.conversation_id:
+        conversation, history = await _load_conversation_history(db, user, req.conversation_id)
+
     pipeline = RAGPipeline(db=db, tenant_id=str(user.tenant_id), user_id=str(user.id))
 
     async def event_generator():
+        full_answer = ""
+        final_citations = None
         async for chunk in pipeline.query_stream(
             query=req.query,
             collection_ids=[str(c) for c in req.collection_ids] if req.collection_ids else None,
@@ -159,8 +169,16 @@ async def query_stream(
             model=req.model,
             use_reranking=req.use_reranking,
             temperature=req.temperature,
+            conversation_history=history,
         ):
+            if chunk.get("type") == "token":
+                full_answer += chunk.get("content", "")
+            elif chunk.get("type") == "citations":
+                final_citations = chunk.get("citations")
             yield f"data: {json.dumps(chunk)}\n\n"
+
+        if conversation is not None and full_answer:
+            await _persist_turn(db, user, conversation, req.query, full_answer, final_citations)
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

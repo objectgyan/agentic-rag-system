@@ -190,6 +190,7 @@ class RAGPipeline:
         model: Optional[str] = None,
         use_reranking: bool = True,
         temperature: float = 0.1,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Stream a RAG query response."""
         chunks = await self.retriever.retrieve(
@@ -201,7 +202,9 @@ class RAGPipeline:
         # Accumulate the full answer to determine which sources were actually cited
         full_answer = ""
 
-        async for token in generator.generate_stream(query, chunks):
+        async for token in generator.generate_stream(
+            query, chunks, conversation_history=conversation_history
+        ):
             # Skip the initial citations - we'll send filtered ones at the end
             if token.get("type") == "citations":
                 continue
