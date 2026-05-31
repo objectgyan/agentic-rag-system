@@ -2,7 +2,10 @@
 
 from typing import Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, model_validator
+
+DEFAULT_JWT_SECRET = "change-me-to-a-long-random-string"
+MIN_JWT_SECRET_LEN = 32
 
 
 class TierLimits:
@@ -100,6 +103,33 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def _reject_insecure_defaults_outside_dev(self):
+        """Fail fast at startup if running outside development with default secrets.
+
+        A weak/default JWT secret lets anyone forge tokens; default object-store
+        credentials expose every stored document. Better to crash loudly on boot than
+        to run silently insecure. Development keeps the convenient defaults.
+        """
+        if self.app_env == "development":
+            return self
+
+        problems = []
+        if self.jwt_secret == DEFAULT_JWT_SECRET:
+            problems.append("JWT_SECRET is still the default placeholder")
+        elif len(self.jwt_secret) < MIN_JWT_SECRET_LEN:
+            problems.append(f"JWT_SECRET must be at least {MIN_JWT_SECRET_LEN} characters")
+        if self.minio_access_key == "minioadmin" or self.minio_secret_key == "minioadmin":
+            problems.append("MinIO credentials are still the default 'minioadmin'")
+
+        if problems:
+            raise ValueError(
+                f"Insecure configuration for APP_ENV={self.app_env!r}: "
+                + "; ".join(problems)
+                + ". Set strong values in the environment, or use APP_ENV=development locally."
+            )
+        return self
 
     class Config:
         env_file = ".env"
