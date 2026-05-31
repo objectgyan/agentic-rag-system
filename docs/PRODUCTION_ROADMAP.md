@@ -260,17 +260,22 @@ real tools; `evaluate=true` returns RAG scores; web search is Tavily-or-honestly
 - **Verify:** with no key, the tool/advertisement reflects unavailability; with a key, it returns live
   results.
 
-### Phase 2 — Ops & quality gates (in progress)
+### Phase 2 — Ops & quality gates — ✅ DONE (73 tests, CI green)
 - ✅ **O1** GitHub Actions CI (lint job: ruff; test job: pgvector+redis services, runs migrations + pytest
   --cov). Added `backend/pyproject.toml` (ruff) and fixed all lint findings.
 - ✅ **O2** Custom Prometheus metrics (`rag_queries_total{status}`, `rag_retrieval_seconds`,
   `rag_generation_seconds`) on the query path; verified on `/metrics/`. (Worker exporter = follow-up.)
-- ⬜ **O3** Structured logging actually used in routes/services with request-ID + tenant-ID correlation.
+- ✅ **O3** Structured logging on stdlib with request-ID + tenant correlation (contextvars + filter +
+  pure-ASGI middleware; X-Request-ID echoed). Verified: `[req=… tenant=…]` correlated across a request.
 - ✅ **O4** Production Docker: non-root backend (`appuser`) + frontend (nginx-unprivileged), `.dockerignore`
   for both, standalone `docker-compose.prod.yml` (no `--reload`, restart policies, celery healthcheck,
   resource limits, internal-only datastores, `APP_ENV=production`). (Helm still not built — README should be
   corrected to drop that claim, or add charts; tracked for later.)
-- ⬜ **O5** Broaden test coverage (retriever fusion, chunkers already partly covered; RBAC matrix, admin).
+- ✅ **O5** Broadened coverage: RBAC matrix (admin/member/viewer) and RRF fusion, on top of existing
+  chunker/auth/etc. tests. 73 tests total.
+
+**Remaining known follow-ups (small, non-blocking):** worker metrics exporter (separate process), Helm
+charts (README now honestly marks these as roadmap), and a deeper mypy pass.
 
 ### Phase 3 — The ambitious net-new features (the "AGI-adjacent" learning)
 - **A1** Multi-hop / recursive retrieval (iterative retrieve→reason→retrieve).
