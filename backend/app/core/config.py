@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 100
     log_level: str = "INFO"
 
+    # Brute-force protection: stricter, IP-keyed limit for unauthenticated auth
+    # endpoints (login/register/refresh), independent of tenant tier.
+    auth_rate_limit_per_minute: int = 10
+    # Only trust X-Forwarded-For / X-Real-IP when running behind a proxy you control
+    # (e.g. an ingress/LB). If false, the IP comes from the direct socket so clients
+    # cannot spoof their identity to evade IP rate limits.
+    trust_proxy_headers: bool = False
+
     # Database
     database_url: str = "postgresql+asyncpg://agentrag:agentrag@localhost:5432/agentrag"
     database_sync_url: str = "postgresql://agentrag:agentrag@localhost:5432/agentrag"
