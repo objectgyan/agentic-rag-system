@@ -1,14 +1,14 @@
 """Agent orchestrator implementing ReAct-style reasoning with tool use."""
 
-from typing import List, Optional, Dict, Any, AsyncIterator
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.services.rag.retriever import HybridRetriever
-from app.services.rag.embedder import EmbeddingService
-from app.services.agents.tools import ToolRegistry
-from app.core.config import settings
-from app.core.llm_clients import openai_client, anthropic_client
 import json
+from typing import Any, AsyncIterator, Dict, List, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.llm_clients import anthropic_client, openai_client
+from app.services.agents.tools import ToolRegistry
+from app.services.rag.retriever import HybridRetriever
 
 AGENT_SYSTEM_PROMPTS = {
     "research": (

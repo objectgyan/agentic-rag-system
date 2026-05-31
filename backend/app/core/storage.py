@@ -1,7 +1,9 @@
 """MinIO/S3 object storage client."""
 
-from minio import Minio
 from io import BytesIO
+
+from minio import Minio
+
 from app.core.config import settings
 
 minio_client = Minio(

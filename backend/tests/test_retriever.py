@@ -6,7 +6,9 @@ session, so no database or embedding API is required.
 """
 
 import uuid
+
 import pytest
+
 from app.services.rag.retriever import HybridRetriever
 
 

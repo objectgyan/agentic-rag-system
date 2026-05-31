@@ -1,17 +1,19 @@
 """Main RAG pipeline orchestrating retrieval, enhancement, and generation."""
 
 import logging
-import time
 import re
-from typing import List, Optional, Dict, Any, AsyncIterator, Set
+import time
+from typing import Any, AsyncIterator, Dict, List, Optional, Set
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
-from app.services.rag.retriever import HybridRetriever, RetrievedChunk
+from app.core.config import settings
 from app.services.rag.embedder import EmbeddingService
 from app.services.rag.generator import GenerationService
 from app.services.rag.query_enhancer import QueryEnhancer
-from app.core.config import settings
+from app.services.rag.retriever import HybridRetriever, RetrievedChunk
+
+logger = logging.getLogger(__name__)
 
 
 class RAGPipeline:
@@ -99,9 +101,10 @@ class RAGPipeline:
         citations = []
         if include_citations:
             cited_source_nums = self._extract_cited_sources(result["answer"])
-            from app.models.document import Document
             from sqlalchemy import select
-            
+
+            from app.models.document import Document
+
             for i, chunk in enumerate(all_chunks, 1):
                 # Only include if this source was actually cited in the answer
                 if i in cited_source_nums:
@@ -154,27 +157,28 @@ class RAGPipeline:
         )
 
         generator = GenerationService(model=model, temperature=temperature)
-        
+
         # Accumulate the full answer to determine which sources were actually cited
         full_answer = ""
-        
+
         async for token in generator.generate_stream(query, chunks):
             # Skip the initial citations - we'll send filtered ones at the end
             if token.get("type") == "citations":
                 continue
-            
+
             # Accumulate answer text
             if token.get("type") == "token":
                 full_answer += token.get("content", "")
-            
+
             yield token
-        
+
         # Now send filtered citations based on what was actually cited
         cited_source_nums = self._extract_cited_sources(full_answer)
         if cited_source_nums:
-            from app.models.document import Document
             from sqlalchemy import select
-            
+
+            from app.models.document import Document
+
             enriched_citations = []
             for i, chunk in enumerate(chunks, 1):
                 if i in cited_source_nums:
@@ -190,7 +194,7 @@ class RAGPipeline:
                         "score": chunk.score,
                         "page_number": chunk.page_number,
                     })
-            
+
             if enriched_citations:
                 yield {
                     "type": "citations",
@@ -200,6 +204,7 @@ class RAGPipeline:
     async def _track_usage(self, tokens: Optional[int], model: Optional[str]):
         """Record usage for billing and limits."""
         from datetime import datetime, timezone
+
         from app.models.usage import UsageRecord
 
         record = UsageRecord(

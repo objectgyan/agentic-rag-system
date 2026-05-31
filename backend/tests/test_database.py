@@ -6,7 +6,9 @@ interpolated into the SQL text, and (b) non-UUID input is rejected before any SQ
 """
 
 import uuid
+
 import pytest
+
 from app.core.database import set_tenant_context
 
 

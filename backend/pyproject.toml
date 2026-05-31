@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["migrations", "venv"]
+
+[tool.ruff.lint]
+# pycodestyle errors/warnings, pyflakes, and import sorting.
+select = ["E", "F", "I", "W"]
+# E501 (line length) is advisory here — line-length above is generous and we don't want
+# noise from a few long strings/SQL.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests intentionally use star-ish fixtures and local imports.
+"tests/*" = ["E402"]

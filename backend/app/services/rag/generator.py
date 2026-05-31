@@ -1,8 +1,9 @@
 """LLM generation service with streaming support."""
 
-from typing import List, Optional, AsyncIterator, Dict, Any
+from typing import Any, AsyncIterator, Dict, List, Optional
+
 from app.core.config import settings
-from app.core.llm_clients import openai_client, anthropic_client
+from app.core.llm_clients import anthropic_client, openai_client
 from app.services.rag.retriever import RetrievedChunk
 
 

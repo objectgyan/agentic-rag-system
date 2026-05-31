@@ -1,16 +1,17 @@
 """Authentication dependencies for FastAPI routes."""
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.core.database import get_db, set_tenant_context
-from app.core.security import decode_token
-from app.models.user import User, UserRole
-from app.models.api_key import ApiKey
-from app.core.security import verify_password
 from datetime import datetime, timezone
 from typing import Optional
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db, set_tenant_context
+from app.core.security import decode_token, verify_password
+from app.models.api_key import ApiKey
+from app.models.user import User
 
 security = HTTPBearer(auto_error=False)
 
@@ -28,7 +29,7 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
     user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == user_id, User.is_active == True))
+    result = await db.execute(select(User).where(User.id == user_id, User.is_active.is_(True)))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
@@ -71,7 +72,7 @@ async def get_user_from_api_key(
     result = await db.execute(
         select(ApiKey).where(
             ApiKey.key_prefix == prefix,
-            ApiKey.is_active == True,
+            ApiKey.is_active.is_(True),
         )
     )
     now = datetime.now(timezone.utc)

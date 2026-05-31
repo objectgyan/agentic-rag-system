@@ -5,10 +5,11 @@ trusted unless configured) and the fixed-window counter's fail-open behavior.
 """
 
 import types
+
 import pytest
 
-from app.middleware.rate_limiter import RateLimitMiddleware
 from app.core.config import settings
+from app.middleware.rate_limiter import RateLimitMiddleware
 
 
 def _req(headers=None, client_host="1.2.3.4"):

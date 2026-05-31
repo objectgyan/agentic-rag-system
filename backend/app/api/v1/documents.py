@@ -2,20 +2,22 @@
 
 import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from uuid import UUID
 from typing import List
-from app.core.database import get_db
-from app.core.config import settings
-from app.core.storage import upload_file
-from app.models.user import User
-from app.models.document import Document, DocumentStatus, DocumentType
-from app.schemas.document import DocumentUploadResponse, DocumentResponse, DocumentURLIngest
-from app.api.deps.auth import get_current_user, require_member
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.deps.access import assert_collection_accessible
+from app.api.deps.auth import get_current_user, require_member
 from app.core.audit import create_audit_log
+from app.core.config import settings
+from app.core.database import get_db
+from app.core.storage import upload_file
+from app.models.document import Document, DocumentStatus, DocumentType
+from app.models.user import User
+from app.schemas.document import DocumentResponse, DocumentUploadResponse, DocumentURLIngest
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - name: ruff check
+        run: ruff check .
+
+  test:
+    name: Tests (pytest + live DB)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: agentrag
+          POSTGRES_PASSWORD: agentrag
+          POSTGRES_DB: agentrag
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U agentrag"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      # App/worker + tests connect as the restricted role (created by migration 004);
+      # Alembic connects as the owner via DATABASE_SYNC_URL.
+      DATABASE_URL: postgresql+asyncpg://agentrag_app:agentrag_app@localhost:5432/agentrag
+      DATABASE_SYNC_URL: postgresql://agentrag:agentrag@localhost:5432/agentrag
+      REDIS_URL: redis://localhost:6379/0
+      APP_ENV: development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Run migrations (creates agentrag_app role + FORCE RLS)
+        run: alembic upgrade head
+      - name: Run tests
+        run: pytest -v --cov=app

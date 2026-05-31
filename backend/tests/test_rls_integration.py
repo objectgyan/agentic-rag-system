@@ -10,6 +10,7 @@ Skips cleanly when no database is reachable (e.g. unit-only CI without Postgres)
 
 import os
 import uuid
+
 import pytest
 
 asyncpg = pytest.importorskip("asyncpg")

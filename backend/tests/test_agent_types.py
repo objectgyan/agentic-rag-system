@@ -1,8 +1,9 @@
 """Test that advertised agent tools all actually exist (C2)."""
 
+import asyncio
+
 from app.api.v1.agents import _AGENT_TYPES, list_agent_types
 from app.services.agents.tools import ToolRegistry
-import asyncio
 
 
 def test_advertised_tools_are_all_real():

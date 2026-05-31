@@ -1,15 +1,17 @@
 """Agent execution endpoints."""
 
-import time
 import json
+import time
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps.access import assert_collections_accessible
+from app.api.deps.auth import get_current_user
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.agent import AgentExecuteRequest, AgentExecuteResponse
-from app.api.deps.auth import get_current_user
-from app.api.deps.access import assert_collections_accessible
 from app.services.agents.orchestrator import AgentOrchestrator
 from app.services.agents.tools import ToolRegistry
 

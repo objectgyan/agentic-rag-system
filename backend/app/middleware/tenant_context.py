@@ -2,6 +2,7 @@
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+
 from app.core.security import decode_token
 
 

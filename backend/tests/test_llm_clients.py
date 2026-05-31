@@ -8,7 +8,7 @@ Skips provider clients when no API key is configured.
 import pytest
 
 from app.core.config import settings
-from app.core.llm_clients import openai_client, anthropic_client, cohere_client
+from app.core.llm_clients import anthropic_client, cohere_client, openai_client
 
 
 def test_openai_client_uses_configured_retries():

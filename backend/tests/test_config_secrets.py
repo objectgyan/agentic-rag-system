@@ -8,7 +8,7 @@ secrets or the process refuses to start.
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import Settings, DEFAULT_JWT_SECRET
+from app.core.config import DEFAULT_JWT_SECRET, Settings
 
 STRONG_JWT = "x" * 48
 STRONG_MINIO = dict(minio_access_key="real-access", minio_secret_key="real-secret-value")

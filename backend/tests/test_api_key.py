@@ -7,7 +7,7 @@ for empty input. The session is mocked; bcrypt hashing is real (one hash).
 
 import types
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 

@@ -1,8 +1,8 @@
 """Content extractors for all supported document types."""
 
-from typing import Optional, List, Tuple
-from dataclasses import dataclass
 import io
+from dataclasses import dataclass
+from typing import List, Optional
 
 from app.core.llm_clients import openai_client
 
@@ -114,8 +114,8 @@ class ImageExtractor:
     """Extract text from images using OCR and optional vision models."""
 
     def extract(self, data: bytes) -> ExtractedContent:
-        from PIL import Image
         import pytesseract
+        from PIL import Image
 
         image = Image.open(io.BytesIO(data))
         text = pytesseract.image_to_string(image)
@@ -132,8 +132,7 @@ class ImageExtractor:
     async def extract_with_vision(self, data: bytes) -> ExtractedContent:
         """Use GPT-4V or Claude for rich image understanding."""
         import base64
-        import openai
-        from app.core.config import settings
+
 
         b64 = base64.b64encode(data).decode()
         client = openai_client()
@@ -164,8 +163,6 @@ class AudioExtractor:
     """Extract text from audio using Whisper transcription."""
 
     async def extract(self, data: bytes, filename: str = "audio.mp3") -> ExtractedContent:
-        import openai
-        from app.core.config import settings
 
         client = openai_client()
         audio_file = io.BytesIO(data)
@@ -190,11 +187,10 @@ class VideoExtractor:
     """Extract text from video by transcribing audio track."""
 
     async def extract(self, data: bytes, filename: str = "video.mp4") -> ExtractedContent:
-        import openai
-        import tempfile
         import subprocess
+        import tempfile
         from pathlib import Path
-        from app.core.config import settings
+
 
         # Save video to temp file
         with tempfile.NamedTemporaryFile(suffix=Path(filename).suffix, delete=False) as video_file:
@@ -264,25 +260,25 @@ class URLExtractor:
                     break  # Success, use this encoding
                 except (UnicodeDecodeError, LookupError):
                     continue
-        
+
         # If all else fails, use UTF-8 with ignore errors
         if html_text is None:
             html_text = response.content.decode('utf-8', errors='ignore')
-        
+
         # Now parse the properly decoded text
         soup = BeautifulSoup(html_text, "html.parser")
-        
+
         for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
             tag.decompose()
 
         text = soup.get_text(separator="\n", strip=True)
-        
+
         # Clean up excessive whitespace and newlines
         import re
         text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Replace 3+ newlines with 2
         text = re.sub(r' +', ' ', text)  # Replace multiple spaces with single space
         text = text.strip()
-        
+
         title = soup.title.string if soup.title else url
 
         return ExtractedContent(

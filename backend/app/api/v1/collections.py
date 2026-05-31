@@ -1,18 +1,20 @@
 """Collection management endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 from uuid import UUID
-from app.core.database import get_db
-from app.models.user import User
-from app.models.collection import Collection, CollectionVisibility
-from app.models.document import Document
-from app.schemas.collection import CollectionCreate, CollectionUpdate, CollectionResponse
-from app.api.deps.auth import get_current_user, require_member
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.deps.access import assert_collection_accessible
+from app.api.deps.auth import get_current_user, require_member
 from app.core.audit import create_audit_log
 from app.core.config import TierLimits
+from app.core.database import get_db
+from app.models.collection import Collection
+from app.models.document import Document
+from app.models.user import User
+from app.schemas.collection import CollectionCreate, CollectionResponse, CollectionUpdate
 
 router = APIRouter()
 
@@ -53,7 +55,7 @@ async def create_collection(
     db.add(collection)
     await db.commit()
     await db.refresh(collection)
-    
+
     # Create audit log
     await create_audit_log(
         db=db,

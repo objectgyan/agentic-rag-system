@@ -1,10 +1,12 @@
 """Tool registry and implementations for agentic AI."""
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.services.rag.retriever import HybridRetriever
-from app.core.llm_clients import openai_client
+
 from app.core.config import settings
+from app.core.llm_clients import openai_client
+from app.services.rag.retriever import HybridRetriever
 
 
 class ToolRegistry:

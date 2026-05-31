@@ -1,8 +1,9 @@
 """Application configuration loaded from environment variables."""
 
 from typing import Optional
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
-from pydantic import Field, model_validator
 
 DEFAULT_JWT_SECRET = "change-me-to-a-long-random-string"
 MIN_JWT_SECRET_LEN = 32

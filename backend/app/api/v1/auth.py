@@ -1,21 +1,28 @@
 """Authentication endpoints: register, login, refresh, OAuth2, API keys."""
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.core.database import get_db, set_tenant_context
-from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps.auth import get_current_user, require_admin
+from app.core.audit import create_audit_log
 from app.core.config import settings
+from app.core.database import get_db, set_tenant_context
+from app.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
+from app.models.api_key import ApiKey
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
-from app.models.api_key import ApiKey
-from app.core.audit import create_audit_log
 from app.schemas.auth import (
-    RegisterRequest, LoginRequest, TokenResponse, RefreshRequest,
-    UserResponse, ApiKeyCreateRequest, ApiKeyResponse,
+    ApiKeyCreateRequest,
+    ApiKeyResponse,
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
 )
-from app.api.deps.auth import get_current_user, require_admin
-import re
 
 router = APIRouter()
 
@@ -104,7 +111,7 @@ async def refresh_token(req: RefreshRequest, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == user_id, User.is_active == True))
+    result = await db.execute(select(User).where(User.id == user_id, User.is_active.is_(True)))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")

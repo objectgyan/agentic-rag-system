@@ -1,6 +1,7 @@
 """RAG evaluation metrics: faithfulness, relevance, context precision, completeness."""
 
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from app.core.config import settings
 from app.core.llm_clients import openai_client
 

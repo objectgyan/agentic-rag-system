@@ -1,9 +1,9 @@
 """Tests for the document-processing retry backoff (F13)."""
 
 from app.services.processing.tasks import (
-    _retry_countdown,
     RETRY_BASE_DELAY_SECONDS,
     RETRY_MAX_DELAY_SECONDS,
+    _retry_countdown,
 )
 
 

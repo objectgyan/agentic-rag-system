@@ -1,6 +1,7 @@
 """Tests for the capped upload reader (F7)."""
 
 import io
+
 import pytest
 from fastapi import HTTPException
 

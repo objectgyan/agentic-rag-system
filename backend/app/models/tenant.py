@@ -1,12 +1,15 @@
 """Tenant (organization) model."""
 
+import enum
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Enum as SAEnum
+
+from sqlalchemy import Column, DateTime, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+
 from app.core.database import Base
-import enum
 
 
 class TenantTier(str, enum.Enum):

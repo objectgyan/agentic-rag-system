@@ -2,16 +2,18 @@
 
 import logging
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
+
+from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging
-
-logger = logging.getLogger(__name__)
 from app.middleware.rate_limiter import RateLimitMiddleware
 from app.middleware.tenant_context import TenantContextMiddleware
-from app.api.v1.router import api_router
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager

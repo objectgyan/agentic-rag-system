@@ -1,24 +1,28 @@
 """Query and chat endpoints with streaming support."""
 
-import time
 import json
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
-from app.models.user import User
-from app.models.conversation import Conversation, Message, MessageRole
-from app.schemas.query import (
-    QueryRequest, QueryResponse, ChatRequest, ConversationCreate,
-    ConversationResponse, ChatMessage,
-)
-from app.api.deps.auth import get_current_user
-from app.api.deps.access import assert_collection_accessible, assert_collections_accessible
-from app.services.rag.pipeline import RAGPipeline
-from app.services.rag.retriever import HybridRetriever
-from uuid import UUID
+import time
 from typing import List
-from sqlalchemy import select, func
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps.access import assert_collection_accessible, assert_collections_accessible
+from app.api.deps.auth import get_current_user
+from app.core.database import get_db
+from app.models.conversation import Conversation, Message, MessageRole
+from app.models.user import User
+from app.schemas.query import (
+    ChatMessage,
+    ConversationCreate,
+    ConversationResponse,
+    QueryRequest,
+    QueryResponse,
+)
+from app.services.rag.pipeline import RAGPipeline
 
 router = APIRouter()
 

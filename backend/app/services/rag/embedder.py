@@ -1,9 +1,9 @@
 """Embedding service supporting multiple providers."""
 
 from typing import List, Optional
-import numpy as np
+
 from app.core.config import settings
-from app.core.llm_clients import openai_client, cohere_client
+from app.core.llm_clients import cohere_client, openai_client
 
 
 class EmbeddingService:
@@ -46,11 +46,11 @@ class EmbeddingService:
         import tiktoken
 
         client = openai_client()
-        
+
         # Tokenizer for the embedding model
         encoding = tiktoken.get_encoding("cl100k_base")
         max_tokens = 8191  # OpenAI embedding models have 8191 token limit
-        
+
         # Truncate texts that are too long
         processed_texts = []
         for text in texts:

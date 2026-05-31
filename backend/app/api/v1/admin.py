@@ -1,21 +1,22 @@
 """Admin endpoints for tenant management."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from app.core.database import get_db
-from app.models.user import User
-from app.models.tenant import Tenant, TenantTier
-from app.models.usage import UsageRecord
-from app.models.audit_log import AuditLog
-from app.schemas.admin import UsageStats, TierUpdateRequest, UserManageRequest, UserCreateRequest, AuditLogEntry
-from app.api.deps.auth import require_admin
-from uuid import UUID
-from typing import List
 from datetime import datetime, timezone
-from app.core.security import hash_password
-from app.models.user import UserRole
+from typing import List
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps.auth import require_admin
 from app.core.audit import create_audit_log
+from app.core.database import get_db
+from app.core.security import hash_password
+from app.models.audit_log import AuditLog
+from app.models.tenant import Tenant
+from app.models.usage import UsageRecord
+from app.models.user import User, UserRole
+from app.schemas.admin import AuditLogEntry, TierUpdateRequest, UsageStats, UserCreateRequest, UserManageRequest
 
 router = APIRouter()
 
@@ -86,15 +87,15 @@ async def update_tier(
     result = await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))
     tenant = result.scalar_one()
     old_tier = tenant.tier if isinstance(tenant.tier, str) else tenant.tier.value
-    
+
     try:
         from app.models.tenant import TenantTier
         tenant.tier = TenantTier(req.tier).value
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid tier: {req.tier}")
-    
+
     await db.commit()
-    
+
     # Create audit log
     await create_audit_log(
         db=db,
@@ -104,7 +105,7 @@ async def update_tier(
         resource_id=str(tenant.id),
         details={"old_tier": old_tier, "new_tier": req.tier},
     )
-    
+
     return {"status": "updated", "tier": tenant.tier}
 
 
@@ -146,13 +147,13 @@ async def create_user(
     existing_user = result.scalar_one_or_none()
     if existing_user:
         raise HTTPException(status_code=400, detail="User with this email already exists")
-    
+
     # Validate role
     try:
         user_role = UserRole(req.role)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid role: {req.role}")
-    
+
     # Create new user
     new_user = User(
         email=req.email,
@@ -165,7 +166,7 @@ async def create_user(
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    
+
     # Create audit log
     await create_audit_log(
         db=db,
@@ -175,7 +176,7 @@ async def create_user(
         resource_id=str(new_user.id),
         details={"email": new_user.email, "role": new_user.role if isinstance(new_user.role, str) else new_user.role.value},
     )
-    
+
     return {
         "id": str(new_user.id),
         "email": new_user.email,

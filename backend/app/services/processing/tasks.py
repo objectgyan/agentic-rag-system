@@ -4,6 +4,8 @@ import asyncio
 import logging
 import random
 from datetime import datetime, timezone
+
+import app.models  # noqa: F401  -- ensure SQLAlchemy relationships are configured
 from app.core.celery_app import celery_app
 from app.core.config import settings
 
@@ -23,9 +25,6 @@ def _retry_countdown(retries: int) -> int:
     window = min(RETRY_MAX_DELAY_SECONDS, RETRY_BASE_DELAY_SECONDS * (2 ** retries))
     return int(window / 2 + random.uniform(0, window / 2))
 
-# Import all models to ensure SQLAlchemy relationships are properly configured
-import app.models  # noqa: F401
-
 
 def run_async(coro):
     """Helper to run async code in sync Celery tasks."""
@@ -43,7 +42,7 @@ def process_document(self, document_id: str, tenant_id: str):
 
 
 async def _process_document_async(task, document_id: str, tenant_id: str):
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     engine = create_async_engine(settings.database_url, pool_size=5)
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -60,10 +59,11 @@ async def _process_document_async(task, document_id: str, tenant_id: str):
 
 async def _run_processing(task, db, document_id: str, tenant_id: str):
     from sqlalchemy import select
+
     from app.core.database import set_tenant_context
-    from app.models.document import Document, DocumentStatus
     from app.models.chunk import Chunk
     from app.models.collection import Collection
+    from app.models.document import Document, DocumentStatus
 
     try:
         # Set tenant context BEFORE any tenant-scoped query (F10). The worker connects
@@ -169,7 +169,7 @@ async def _run_processing(task, db, document_id: str, tenant_id: str):
 
 async def _extract_content(doc):
     """Extract content based on document type."""
-    from app.services.processing.extractors import get_extractor, AudioExtractor, VideoExtractor, URLExtractor
+    from app.services.processing.extractors import AudioExtractor, URLExtractor, VideoExtractor, get_extractor
 
     if doc.doc_type == "url":
         extractor = URLExtractor()

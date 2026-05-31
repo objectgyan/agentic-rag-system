@@ -2,8 +2,10 @@
 
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Integer, Float
+
+from sqlalchemy import Column, DateTime, Float, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
+
 from app.core.database import Base
 
 

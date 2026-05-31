@@ -1,7 +1,8 @@
 """V1 API router aggregating all sub-routers."""
 
 from fastapi import APIRouter
-from app.api.v1 import auth, collections, documents, query, agents, admin, health
+
+from app.api.v1 import admin, agents, auth, collections, documents, health, query
 
 api_router = APIRouter(prefix="/api/v1")
 

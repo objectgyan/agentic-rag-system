@@ -1,15 +1,18 @@
 """Hybrid retriever: dense vector search + BM25 sparse search + re-ranking."""
 
 import logging
-from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
+from typing import Dict, List, Optional
+
 import numpy as np
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text as sa_text
 from rank_bm25 import BM25Okapi
+from sqlalchemy import select
+from sqlalchemy import text as sa_text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
 from app.models.chunk import Chunk
 from app.services.rag.embedder import EmbeddingService
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 

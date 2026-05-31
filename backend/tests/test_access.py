@@ -4,8 +4,9 @@ Pure unit tests with a mocked session — they assert the 404/403/allow decision
 that no-op cases never touch the database.
 """
 
-import uuid
 import types
+import uuid
+
 import pytest
 from fastapi import HTTPException
 

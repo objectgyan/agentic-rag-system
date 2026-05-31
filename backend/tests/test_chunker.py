@@ -1,6 +1,5 @@
 """Tests for chunking strategies."""
 
-import pytest
 from app.services.rag.chunker import ChunkingService
 
 

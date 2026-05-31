@@ -1,10 +1,11 @@
 """Audit logging utility."""
 
+from typing import Any, Dict, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.audit_log import AuditLog
 from app.models.user import User
-from typing import Optional, Dict, Any
-from uuid import UUID
 
 
 async def create_audit_log(

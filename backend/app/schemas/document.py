@@ -1,9 +1,10 @@
 """Document schemas."""
 
-from typing import Optional
-from pydantic import BaseModel, HttpUrl
-from uuid import UUID
 from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel
 
 
 class DocumentUploadResponse(BaseModel):

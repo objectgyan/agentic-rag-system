@@ -21,8 +21,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.core.redis import redis_client
 from app.core.config import TierLimits, settings
+from app.core.redis import redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 logger.warning("auth rate limit exceeded for ip=%s (%s/%s)", ip, current, limit)
                 return self._limit_response(
                     limit,
-                    f"Too many authentication attempts. Try again in a minute.",
+                    "Too many authentication attempts. Try again in a minute.",
                 )
             return await call_next(request)
 

@@ -1,6 +1,7 @@
 """Query enhancement: multi-query expansion, HyDE, query decomposition."""
 
 from typing import List, Optional
+
 from app.core.config import settings
 from app.core.llm_clients import openai_client
 
