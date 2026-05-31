@@ -75,14 +75,18 @@ class HybridRetriever:
             params["collection_ids"] = collection_ids
 
         where_clause = " AND ".join(conditions)
-        embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+        # Bind the embedding as a parameter (pgvector accepts the text form
+        # '[1,2,3]' cast to ::vector) instead of interpolating it into the SQL (F4).
+        # Low exploitability since the values are numeric, but it removes the
+        # injection pattern and lets Postgres reuse the prepared statement.
+        params["embedding"] = "[" + ",".join(str(x) for x in query_embedding) + "]"
 
         sql = f"""
             SELECT c.id, c.document_id, c.content, c.page_number, c.section_title,
-                   1 - (c.embedding <=> '{embedding_str}'::vector) as score
+                   1 - (c.embedding <=> (:embedding)::vector) as score
             FROM chunks c
             WHERE {where_clause}
-            ORDER BY c.embedding <=> '{embedding_str}'::vector
+            ORDER BY c.embedding <=> (:embedding)::vector
             LIMIT :top_k
         """
 
