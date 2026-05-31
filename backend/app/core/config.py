@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     cohere_api_key: Optional[str] = None
+    # Tavily API key for the agent web_search tool (C4). When unset, web search is
+    # not offered and the tool reports itself as unconfigured rather than faking results.
+    web_search_api_key: Optional[str] = None
 
     # External API resilience (F11): explicit timeout + bounded retries for all
     # LLM/embedding/rerank calls, so a hung or flaky upstream fails fast and self-heals.

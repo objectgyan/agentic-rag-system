@@ -15,17 +15,16 @@ def test_advertised_tools_are_all_real():
     assert "code_execution" not in advertised
 
 
-def test_every_registry_tool_has_a_handler():
-    # Guards the single-source-of-truth invariant: TOOLS entries must be executable.
-    reg = ToolRegistry(db=None, tenant_id="t", retriever=None)
-    handler_names = {
-        "retrieval", "calculator", "web_search", "summarize", "compare",
-    }
-    assert set(reg.available_tool_names()) == handler_names
+def test_tool_catalog_is_the_expected_set():
+    # The full catalog (handlers all exist); availability is then filtered by config (C4).
+    catalog = {t["name"] for t in ToolRegistry.TOOLS}
+    assert catalog == {"retrieval", "calculator", "web_search", "summarize", "compare"}
 
 
 def test_static_agent_types_only_reference_real_tools():
-    available = set(ToolRegistry.available_tool_names())
+    # Static lists reference the full catalog (web_search is real even if a key gates
+    # its runtime availability); /agents/types filters to enabled tools at request time.
+    catalog = {t["name"] for t in ToolRegistry.TOOLS}
     for agent in _AGENT_TYPES:
         for tool in agent["tools"]:
-            assert tool in available, f"{agent['type']} references unknown tool {tool}"
+            assert tool in catalog, f"{agent['type']} references unknown tool {tool}"

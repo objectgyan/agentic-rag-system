@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.rag.retriever import HybridRetriever
 from app.core.llm_clients import openai_client
+from app.core.config import settings
 
 
 class ToolRegistry:
@@ -41,14 +42,31 @@ class ToolRegistry:
         self.retriever = retriever
 
     @classmethod
+    def _tool_is_enabled(cls, name: str) -> bool:
+        """Whether a tool is actually usable given current config (C4).
+
+        web_search needs a provider key; if absent we don't offer it (and the handler
+        reports itself unconfigured) rather than advertising a capability that fakes
+        results. All other tools are always available.
+        """
+        if name == "web_search":
+            return bool(settings.web_search_api_key)
+        return True
+
+    @classmethod
+    def available_tools(cls) -> List[dict]:
+        return [t for t in cls.TOOLS if cls._tool_is_enabled(t["name"])]
+
+    @classmethod
     def available_tool_names(cls) -> List[str]:
-        return [t["name"] for t in cls.TOOLS]
+        return [t["name"] for t in cls.available_tools()]
 
     def get_tools(self, tool_names: Optional[List[str]] = None, collection_ids: Optional[List[str]] = None) -> List[dict]:
-        """Get available tool descriptions."""
+        """Get available (config-enabled) tool descriptions."""
+        tools = self.available_tools()
         if tool_names:
-            return [t for t in self.TOOLS if t["name"] in tool_names]
-        return list(self.TOOLS)
+            return [t for t in tools if t["name"] in tool_names]
+        return tools
 
     async def execute_tool(self, tool_name: str, params: dict) -> str:
         """Execute a tool and return the result as a string."""
@@ -107,9 +125,39 @@ class ToolRegistry:
             return f"Calculation error: {str(e)}"
 
     async def _tool_web_search(self, params: dict) -> str:
-        """Placeholder for web search integration."""
+        """Web search via Tavily when configured; honest about it when not (C4)."""
         query = params.get("query", "")
-        return f"Web search for '{query}' — integration pending. Use retrieval tool for document-based search."
+        if not settings.web_search_api_key:
+            return (
+                "Web search is not configured on this server (no WEB_SEARCH_API_KEY). "
+                "Use the retrieval tool for document-based search."
+            )
+
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=settings.external_api_timeout_seconds) as client:
+                resp = await client.post(
+                    "https://api.tavily.com/search",
+                    json={
+                        "api_key": settings.web_search_api_key,
+                        "query": query,
+                        "max_results": 5,
+                        "search_depth": "basic",
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as e:
+            return f"Web search failed: {e}"
+
+        results = data.get("results", [])
+        if not results:
+            return f"No web results found for '{query}'."
+        lines = [
+            f"- {r.get('title', 'Untitled')}: {r.get('content', '')[:200]} ({r.get('url', '')})"
+            for r in results
+        ]
+        return f"Web results for '{query}':\n" + "\n".join(lines)
 
     async def _tool_summarize(self, params: dict) -> str:
         """Summarize text using LLM."""
