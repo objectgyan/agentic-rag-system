@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db, set_tenant_context
+from app.core.logging import bind_tenant
 from app.core.security import decode_token, verify_password
 from app.models.api_key import ApiKey
 from app.models.user import User
@@ -34,8 +35,9 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
-    # Set tenant context for RLS
+    # Set tenant context for RLS, and bind tenant/user to the logging context (O3).
     await set_tenant_context(db, str(user.tenant_id))
+    bind_tenant(str(user.tenant_id), str(user.id))
     return user
 
 
