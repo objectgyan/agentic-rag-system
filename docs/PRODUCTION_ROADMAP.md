@@ -219,13 +219,43 @@ upload → worker ingest → RAG query with citation) works under the restricted
 
 ## Later phases (sketch — detailed when we reach them)
 
-### Phase 1 — Complete the half-built features
-- **C1** Wire conversation memory into generation (history is persisted but `pipeline.query` never passes
-  it to `generator.generate`, which already accepts the param). Each turn is currently stateless.
-- **C2** Fix the `code_execution` tool: `/agents/types` advertises it but `ToolRegistry` has no handler —
-  selecting it crashes. Either implement a sandboxed executor or remove it from the advertised list.
-- **C3** Expose the dead `RAGEvaluator` via an endpoint / optional eval pass so it stops being dead code.
-- **C4** Real web search tool (replace the "integration pending" stub) behind a provider key.
+### Phase 1 — Complete the half-built features (in progress)
+
+#### C1 — Wire conversation memory into generation
+- **Problem:** `/query` is fully stateless. The `Message` model is never written; `ChatRequest` is
+  imported but unused; `generator.generate` accepts `conversation_history` but `pipeline.query` never
+  passes it. So multi-turn chat has no memory.
+- **Fix:** add optional `conversation_id` to `QueryRequest`. When present: authorize the conversation
+  (tenant+user), load prior `messages` as history, pass to the pipeline → generator, and persist the new
+  user + assistant messages (with citations and `tenant_id`, exercising the F3 RLS column). Update the
+  conversation's `updated_at`.
+- **Verify:** create a conversation, ask "My name is X", then "What's my name?" in the same
+  conversation → the second answer reflects the first turn; messages rows exist with the right tenant_id.
+
+#### C2 — Make `/agents/types` reflect the real tool registry
+- **Problem:** `/agents/types` advertises a `code_execution` tool that has no handler in `ToolRegistry`.
+  The orchestrator only ever shows the LLM the registry's real tools, so the model never emits it — but
+  the API still lies about capabilities (and `code_execution` would just return "Unknown tool").
+- **Fix:** derive the advertised tool lists from the registry's actual tools; drop the phantom
+  `code_execution`. (Real sandboxed code execution needs container isolation — out of scope; don't ship
+  an unsafe `exec`.)
+- **Verify:** `/agents/types` lists only tools that exist in `ToolRegistry.execute_tool`.
+
+#### C3 — Expose the dead `RAGEvaluator`
+- **Problem:** `RAGEvaluator` (faithfulness/relevance/precision/completeness) is fully implemented but
+  never instantiated anywhere.
+- **Fix:** an optional `evaluate=true` on a query (or a dedicated `/query/evaluate` endpoint) that runs
+  the evaluator over the produced answer + retrieved contexts and returns the scores.
+- **Verify:** a query with evaluation returns metric scores in [0,1].
+
+#### C4 — Honest web search tool
+- **Problem:** the `web_search` tool returns a hardcoded "integration pending" string while being
+  advertised as a real capability.
+- **Fix:** integrate a real provider when a key is configured (e.g. Tavily/SerpAPI via
+  `web_search_api_key`); when no key is set, return a clear "web search not configured" result and omit
+  the tool from the advertised list rather than pretending.
+- **Verify:** with no key, the tool/advertisement reflects unavailability; with a key, it returns live
+  results.
 
 ### Phase 2 — Ops & quality gates
 - **O1** GitHub Actions CI: ruff + mypy (backend), eslint + tsc (frontend), pytest with the test DB.
