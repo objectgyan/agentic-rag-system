@@ -274,8 +274,8 @@ real tools; `evaluate=true` returns RAG scores; web search is Tavily-or-honestly
 - ✅ **O5** Broadened coverage: RBAC matrix (admin/member/viewer) and RRF fusion, on top of existing
   chunker/auth/etc. tests. 73 tests total.
 
-**Remaining known follow-ups (small, non-blocking):** worker metrics exporter (separate process), Helm
-charts (README now honestly marks these as roadmap), and a deeper mypy pass.
+**Remaining known follow-ups:** a deeper mypy pass. (Worker metrics exporter and Helm charts are now
+done — see the Finishing pass below.)
 
 ### Phase 3 — The ambitious net-new features (the "AGI-adjacent" learning) — ✅ DONE (91 tests)
 - ✅ **A1** Multi-hop / recursive retrieval (`use_multi_hop`): iterative retrieve→reason→retrieve, adaptive
@@ -305,6 +305,22 @@ types matched to backend shapes, removal of the dead `useWebSocket` hook (non-ex
 to support this (completing C1 for that path).
 
 ---
+
+## Finishing pass — ✅ DONE
+
+Completed the remaining bounded items + the architecture diagram:
+- ✅ **Worker metrics exporter** — prometheus multiprocess mode; worker exposes
+  `documents_processed_total` on `:9100`. Verified live.
+- ✅ **Recursive + sitemap web crawling** — `URLExtractor` now honors `recursive`/`max_pages`
+  (same-domain BFS, page cap) and parses `sitemap.xml`. Unit-tested helpers.
+- ✅ **Local cross-encoder reranker** — sentence-transformers `CrossEncoder` path when Cohere isn't set.
+- ✅ **WebSocket chat** — real `/query/ws/chat` (token-query auth, RLS, streaming, memory). Verified live.
+- ✅ **Helm chart** — `deploy/helm/agentrag` (passes `helm lint`, renders 8 resources).
+- ✅ **Architecture diagram** — validated Mermaid in `docs/ARCHITECTURE.md` + README.
+
+**Genuinely deferred (need external services / heavy ML deps — kept honest in the README):** OAuth2
+Google/GitHub SSO (provider apps + redirect infra), audio speaker diarization (pyannote + HF token),
+video frame extraction / scene detection (cv2 + vision), YAML-defined custom agents, deeper mypy.
 
 ## Working agreement
 - I implement Phase 0 in small, explained commits, each referencing its item ID.
