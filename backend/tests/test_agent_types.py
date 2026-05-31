@@ -17,9 +17,10 @@ def test_advertised_tools_are_all_real():
 
 
 def test_tool_catalog_is_the_expected_set():
-    # The full catalog (handlers all exist); availability is then filtered by config (C4).
+    # The full catalog (handlers all exist); availability is then filtered by config (C4)
+    # and delegation depth (A4).
     catalog = {t["name"] for t in ToolRegistry.TOOLS}
-    assert catalog == {"retrieval", "calculator", "web_search", "summarize", "compare"}
+    assert catalog == {"retrieval", "calculator", "web_search", "summarize", "compare", "delegate"}
 
 
 def test_static_agent_types_only_reference_real_tools():

@@ -52,12 +52,15 @@ Task: {task}"""
 class AgentOrchestrator:
     """ReAct-style agent with tool use and multi-step reasoning."""
 
-    def __init__(self, db: AsyncSession, tenant_id: str, user_id: str):
+    def __init__(self, db: AsyncSession, tenant_id: str, user_id: str, depth: int = 0):
         self.db = db
         self.tenant_id = tenant_id
         self.user_id = user_id
+        self.depth = depth
         self.retriever = HybridRetriever(db=db, tenant_id=tenant_id)
-        self.tool_registry = ToolRegistry(db=db, tenant_id=tenant_id, retriever=self.retriever)
+        self.tool_registry = ToolRegistry(
+            db=db, tenant_id=tenant_id, retriever=self.retriever, user_id=user_id, depth=depth
+        )
 
     async def execute(
         self,

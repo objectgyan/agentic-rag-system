@@ -36,12 +36,32 @@ class ToolRegistry:
             "name": "compare",
             "description": "Compare two pieces of text or data. Input: {\"text_a\": \"...\", \"text_b\": \"...\"}",
         },
+        {
+            "name": "delegate",
+            "description": (
+                "Hand a focused sub-task to a specialized sub-agent and get its answer back. "
+                "Input: {\"agent_type\": \"research|analyst|summarizer|code\", \"task\": \"the sub-task\"}"
+            ),
+        },
     ]
 
-    def __init__(self, db: AsyncSession, tenant_id: str, retriever: HybridRetriever):
+    # How deep agent->agent delegation may go. The top agent is depth 0; once an agent
+    # reaches this depth it no longer sees the delegate tool, bounding recursion/cost (A4).
+    MAX_DELEGATION_DEPTH = 1
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        tenant_id: str,
+        retriever: HybridRetriever,
+        user_id: Optional[str] = None,
+        depth: int = 0,
+    ):
         self.db = db
         self.tenant_id = tenant_id
         self.retriever = retriever
+        self.user_id = user_id
+        self.depth = depth
 
     @classmethod
     def _tool_is_enabled(cls, name: str) -> bool:
@@ -64,8 +84,11 @@ class ToolRegistry:
         return [t["name"] for t in cls.available_tools()]
 
     def get_tools(self, tool_names: Optional[List[str]] = None, collection_ids: Optional[List[str]] = None) -> List[dict]:
-        """Get available (config-enabled) tool descriptions."""
+        """Get available (config-enabled, depth-aware) tool descriptions."""
         tools = self.available_tools()
+        # Stop offering delegation once we hit the recursion cap (A4).
+        if self.depth >= self.MAX_DELEGATION_DEPTH:
+            tools = [t for t in tools if t["name"] != "delegate"]
         if tool_names:
             return [t for t in tools if t["name"] in tool_names]
         return tools
@@ -78,6 +101,7 @@ class ToolRegistry:
             "web_search": self._tool_web_search,
             "summarize": self._tool_summarize,
             "compare": self._tool_compare,
+            "delegate": self._tool_delegate,
         }
 
         handler = handlers.get(tool_name)
@@ -196,3 +220,26 @@ class ToolRegistry:
             max_tokens=500,
         )
         return response.choices[0].message.content
+
+    async def _tool_delegate(self, params: dict) -> str:
+        """Run a focused sub-task on a fresh sub-agent and return its answer (A4).
+
+        The sub-agent is created at depth+1, so it cannot delegate again once the cap is
+        reached — bounding recursion and runaway cost. Imported lazily to avoid the
+        orchestrator <-> tools import cycle.
+        """
+        if self.depth >= self.MAX_DELEGATION_DEPTH:
+            return "Delegation depth limit reached; handle this sub-task directly."
+
+        task = params.get("task") or params.get("input")
+        if not task:
+            return "Delegate error: provide a 'task' to hand off."
+        agent_type = params.get("agent_type", "research")
+
+        from app.services.agents.orchestrator import AgentOrchestrator
+
+        sub_agent = AgentOrchestrator(
+            db=self.db, tenant_id=self.tenant_id, user_id=self.user_id, depth=self.depth + 1
+        )
+        result = await sub_agent.execute(task=task, agent_type=agent_type, max_steps=5)
+        return result.get("result", "")
