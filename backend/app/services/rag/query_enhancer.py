@@ -2,6 +2,7 @@
 
 from typing import List, Optional
 from app.core.config import settings
+from app.core.llm_clients import openai_client
 
 
 class QueryEnhancer:
@@ -12,8 +13,7 @@ class QueryEnhancer:
 
     async def multi_query_expand(self, query: str) -> List[str]:
         """Generate multiple query variations for broader retrieval."""
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         response = await client.chat.completions.create(
             model=self.model,
@@ -34,8 +34,7 @@ class QueryEnhancer:
 
     async def hyde_generate(self, query: str) -> str:
         """Hypothetical Document Embeddings — generate a hypothetical answer to embed."""
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         response = await client.chat.completions.create(
             model=self.model,
@@ -54,8 +53,7 @@ class QueryEnhancer:
 
     async def decompose_query(self, query: str) -> List[str]:
         """Decompose a complex query into simpler sub-queries."""
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         response = await client.chat.completions.create(
             model=self.model,

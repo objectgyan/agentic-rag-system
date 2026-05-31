@@ -4,6 +4,8 @@ from typing import Optional, List, Tuple
 from dataclasses import dataclass
 import io
 
+from app.core.llm_clients import openai_client
+
 
 @dataclass
 class ExtractedContent:
@@ -134,7 +136,7 @@ class ImageExtractor:
         from app.core.config import settings
 
         b64 = base64.b64encode(data).decode()
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         response = await client.chat.completions.create(
             model="gpt-4o",
@@ -165,7 +167,7 @@ class AudioExtractor:
         import openai
         from app.core.config import settings
 
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
         audio_file = io.BytesIO(data)
         audio_file.name = filename
 
@@ -209,7 +211,7 @@ class VideoExtractor:
             )
 
             # Transcribe audio with Whisper
-            client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+            client = openai_client()
             with open(audio_path, "rb") as audio_file:
                 response = await client.audio.transcriptions.create(
                     model="whisper-1",

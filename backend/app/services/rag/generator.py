@@ -2,6 +2,7 @@
 
 from typing import List, Optional, AsyncIterator, Dict, Any
 from app.core.config import settings
+from app.core.llm_clients import openai_client, anthropic_client
 from app.services.rag.retriever import RetrievedChunk
 
 
@@ -97,8 +98,7 @@ class GenerationService:
                 yield chunk
 
     async def _generate_openai(self, messages: List[dict]) -> Dict[str, Any]:
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         response = await client.chat.completions.create(
             model=self.model,
@@ -114,8 +114,7 @@ class GenerationService:
         }
 
     async def _generate_anthropic(self, messages: List[dict]) -> Dict[str, Any]:
-        import anthropic
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        client = anthropic_client()
 
         system_msg = messages[0]["content"] if messages[0]["role"] == "system" else ""
         chat_msgs = [m for m in messages if m["role"] != "system"]
@@ -135,8 +134,7 @@ class GenerationService:
         }
 
     async def _stream_openai(self, messages: List[dict]) -> AsyncIterator[Dict[str, Any]]:
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         stream = await client.chat.completions.create(
             model=self.model,
@@ -153,8 +151,7 @@ class GenerationService:
         yield {"type": "done", "model_used": self.model}
 
     async def _stream_anthropic(self, messages: List[dict]) -> AsyncIterator[Dict[str, Any]]:
-        import anthropic
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        client = anthropic_client()
 
         system_msg = messages[0]["content"] if messages[0]["role"] == "system" else ""
         chat_msgs = [m for m in messages if m["role"] != "system"]

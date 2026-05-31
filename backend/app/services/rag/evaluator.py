@@ -2,6 +2,7 @@
 
 from typing import List, Optional, Dict, Any
 from app.core.config import settings
+from app.core.llm_clients import openai_client
 
 
 class RAGEvaluator:
@@ -25,8 +26,7 @@ class RAGEvaluator:
 
     async def faithfulness(self, answer: str, contexts: List[str]) -> float:
         """Is the answer grounded in the retrieved context? Score 0-1."""
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         context = "\n---\n".join(contexts)
         response = await client.chat.completions.create(
@@ -49,8 +49,7 @@ class RAGEvaluator:
 
     async def context_relevance(self, query: str, contexts: List[str]) -> float:
         """Are the retrieved documents relevant to the query? Score 0-1."""
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         context = "\n---\n".join(contexts)
         response = await client.chat.completions.create(
@@ -72,8 +71,7 @@ class RAGEvaluator:
 
     async def context_precision(self, query: str, contexts: List[str]) -> float:
         """How precise is the context — is there minimal noise? Score 0-1."""
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         numbered = "\n".join(f"[{i+1}] {c[:300]}" for i, c in enumerate(contexts))
         response = await client.chat.completions.create(
@@ -96,8 +94,7 @@ class RAGEvaluator:
 
     async def answer_completeness(self, answer: str, ground_truth: str) -> float:
         """Does the answer cover all aspects of the ground truth? Score 0-1."""
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         response = await client.chat.completions.create(
             model=self.model,

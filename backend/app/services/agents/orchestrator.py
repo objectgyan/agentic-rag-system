@@ -6,6 +6,7 @@ from app.services.rag.retriever import HybridRetriever
 from app.services.rag.embedder import EmbeddingService
 from app.services.agents.tools import ToolRegistry
 from app.core.config import settings
+from app.core.llm_clients import openai_client, anthropic_client
 import json
 
 
@@ -186,8 +187,7 @@ class AgentOrchestrator:
     async def _call_llm(self, messages: List[dict], model: str) -> dict:
         """Call LLM and return content + token count."""
         if model.startswith("claude"):
-            import anthropic
-            client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            client = anthropic_client()
 
             system = messages[0]["content"] if messages[0]["role"] == "system" else ""
             chat_msgs = [m for m in messages if m["role"] != "system"]
@@ -201,8 +201,7 @@ class AgentOrchestrator:
                 "tokens": response.usage.input_tokens + response.usage.output_tokens,
             }
         else:
-            import openai
-            client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+            client = openai_client()
 
             response = await client.chat.completions.create(
                 model=model, messages=messages, temperature=0.1, max_tokens=2000,

@@ -178,8 +178,8 @@ class HybridRetriever:
             return chunks[:top_k]
 
         try:
-            import cohere
-            client = cohere.AsyncClient(api_key=settings.cohere_api_key)
+            from app.core.llm_clients import cohere_client
+            client = cohere_client()
 
             response = await client.rerank(
                 model=settings.default_reranker_model,

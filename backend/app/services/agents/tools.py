@@ -3,6 +3,7 @@
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.rag.retriever import HybridRetriever
+from app.core.llm_clients import openai_client
 
 
 class ToolRegistry:
@@ -108,9 +109,7 @@ class ToolRegistry:
         text = params.get("text", "")
         max_length = params.get("max_length", 200)
 
-        import openai
-        from app.core.config import settings
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
@@ -128,9 +127,7 @@ class ToolRegistry:
         text_a = params.get("text_a", "")
         text_b = params.get("text_b", "")
 
-        import openai
-        from app.core.config import settings
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        client = openai_client()
 
         response = await client.chat.completions.create(
             model="gpt-4o-mini",

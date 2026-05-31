@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     anthropic_api_key: Optional[str] = None
     cohere_api_key: Optional[str] = None
 
+    # External API resilience (F11): explicit timeout + bounded retries for all
+    # LLM/embedding/rerank calls, so a hung or flaky upstream fails fast and self-heals.
+    external_api_timeout_seconds: float = 30.0
+    external_api_max_retries: int = 3
+
     # Model defaults
     default_embedding_model: str = "text-embedding-3-small"
     default_embedding_dimensions: int = 1536

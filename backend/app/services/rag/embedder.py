@@ -3,6 +3,7 @@
 from typing import List, Optional
 import numpy as np
 from app.core.config import settings
+from app.core.llm_clients import openai_client, cohere_client
 
 
 class EmbeddingService:
@@ -42,10 +43,9 @@ class EmbeddingService:
 
     async def _embed_openai(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using OpenAI API."""
-        import openai
         import tiktoken
-        
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+
+        client = openai_client()
         
         # Tokenizer for the embedding model
         encoding = tiktoken.get_encoding("cl100k_base")
@@ -74,8 +74,7 @@ class EmbeddingService:
 
     async def _embed_cohere(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using Cohere API."""
-        import cohere
-        client = cohere.AsyncClient(api_key=settings.cohere_api_key)
+        client = cohere_client()
 
         response = await client.embed(
             texts=texts,
