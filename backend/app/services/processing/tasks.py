@@ -4,6 +4,7 @@ import asyncio
 import logging
 import random
 from datetime import datetime, timezone
+from typing import Optional
 
 import app.models  # noqa: F401  -- ensure SQLAlchemy relationships are configured
 from app.core.celery_app import celery_app
@@ -26,13 +27,23 @@ def _retry_countdown(retries: int) -> int:
     return int(window / 2 + random.uniform(0, window / 2))
 
 
+_worker_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
 def run_async(coro):
-    """Helper to run async code in sync Celery tasks."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+    """Run a coroutine on a single event loop reused for the worker process's lifetime.
+
+    The previous version created and closed a fresh loop per task. Async HTTP clients
+    (OpenAI/httpx) hold connections in a pool bound to the loop they were created on;
+    closing the loop out from under them raised "Event loop is closed" during cleanup
+    and could wedge the worker so later tasks hung. Reusing one persistent loop per
+    prefork process is the standard pattern and keeps those pooled connections valid.
+    """
+    global _worker_loop
+    if _worker_loop is None or _worker_loop.is_closed():
+        _worker_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_worker_loop)
+    return _worker_loop.run_until_complete(coro)
 
 
 @celery_app.task(bind=True, max_retries=3)

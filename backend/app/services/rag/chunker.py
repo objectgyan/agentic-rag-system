@@ -22,8 +22,11 @@ class ChunkingService:
 
     def __init__(self, strategy: str = "semantic", chunk_size: int = 512, chunk_overlap: int = 50):
         self.strategy = strategy
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
+        self.chunk_size = max(1, chunk_size)
+        # Overlap MUST be strictly less than chunk_size, or the fixed-window step
+        # (chunk_size - chunk_overlap) is <= 0 and the chunk loop never advances —
+        # an infinite loop that hangs the worker forever (a DoS via collection config).
+        self.chunk_overlap = max(0, min(chunk_overlap, self.chunk_size - 1))
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def chunk(self, text: str, page_numbers: Optional[List[int]] = None) -> List[TextChunk]:
@@ -56,7 +59,7 @@ class ChunkingService:
             content = self.tokenizer.decode(chunk_tokens)
             chunks.append(TextChunk(content=content.strip(), index=idx))
             idx += 1
-            i += self.chunk_size - self.chunk_overlap
+            i += max(1, self.chunk_size - self.chunk_overlap)  # step is always positive
         return chunks
 
     def _semantic_chunk(self, text: str) -> List[TextChunk]:
