@@ -5,19 +5,20 @@ import time
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.access import assert_collection_accessible, assert_collections_accessible
 from app.api.deps.auth import get_current_user
-from app.core.database import get_db
+from app.core.database import get_db, set_tenant_context
 from app.core.metrics import (
     rag_generation_seconds,
     rag_queries_total,
     rag_retrieval_seconds,
 )
+from app.core.security import decode_token
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.user import User
 from app.schemas.query import (
@@ -182,6 +183,74 @@ async def query_stream(
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.websocket("/ws/chat")
+async def ws_chat(
+    websocket: WebSocket,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bidirectional chat over WebSocket. Auth via the `token` query param (browsers
+    can't set headers on a WS handshake). Streams the same token/citations frames the
+    SSE endpoint sends, with conversation memory, over a long-lived connection."""
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "access":
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    result = await db.execute(select(User).where(User.id == payload.get("sub"), User.is_active.is_(True)))
+    user = result.scalar_one_or_none()
+    if not user:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await set_tenant_context(db, str(user.tenant_id))
+    await websocket.accept()
+    pipeline = RAGPipeline(db=db, tenant_id=str(user.tenant_id), user_id=str(user.id))
+
+    try:
+        while True:
+            req = await websocket.receive_json()
+            query_text = (req.get("query") or "").strip()
+            if not query_text:
+                continue
+
+            collection_ids = req.get("collection_ids")
+            try:
+                await assert_collections_accessible(db, user, collection_ids)
+            except HTTPException as exc:
+                await websocket.send_json({"type": "error", "detail": exc.detail})
+                continue
+
+            conversation = None
+            history = None
+            if req.get("conversation_id"):
+                try:
+                    conversation, history = await _load_conversation_history(db, user, req["conversation_id"])
+                except HTTPException:
+                    conversation, history = None, None
+
+            full_answer = ""
+            final_citations = None
+            async for chunk in pipeline.query_stream(
+                query=query_text,
+                collection_ids=collection_ids,
+                top_k=req.get("top_k", 5),
+                model=req.get("model"),
+                use_reranking=req.get("use_reranking", True),
+                conversation_history=history,
+            ):
+                if chunk.get("type") == "token":
+                    full_answer += chunk.get("content", "")
+                elif chunk.get("type") == "citations":
+                    final_citations = chunk.get("citations")
+                await websocket.send_json(chunk)
+
+            if conversation is not None and full_answer:
+                await _persist_turn(db, user, conversation, query_text, full_answer, final_citations)
+            await websocket.send_json({"type": "done"})
+    except WebSocketDisconnect:
+        return
 
 
 @router.post("/conversations", response_model=ConversationResponse)
