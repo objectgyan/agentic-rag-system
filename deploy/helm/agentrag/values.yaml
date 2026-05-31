@@ -1,0 +1,56 @@
+# Minimal Helm values for AgentRAG.
+#
+# This chart deploys the application tier (backend, Celery worker, Celery beat,
+# frontend) plus a pre-upgrade migration Job. Postgres / Redis / MinIO are expected to
+# be provided (managed services or their own charts) — wire them via `config.*` below.
+#
+# IMPORTANT: replace every CHANGE_ME before installing. With APP_ENV=production the app
+# refuses to boot on default secrets (F8).
+
+image:
+  backend: agentrag-backend:latest
+  frontend: agentrag-frontend:latest
+  pullPolicy: IfNotPresent
+
+backend:
+  replicas: 2
+  resources:
+    limits:
+      memory: 2Gi
+
+worker:
+  replicas: 1
+  concurrency: 4
+  resources:
+    limits:
+      memory: 2Gi
+
+beat:
+  enabled: true
+
+frontend:
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 80
+
+# Non-secret runtime config. The app/worker use the restricted agentrag_app role
+# (DATABASE_URL); Alembic uses the owner role (DATABASE_SYNC_URL) — keep them distinct.
+config:
+  appEnv: production
+  trustProxyHeaders: "true"
+  databaseUrl: postgresql+asyncpg://agentrag_app:CHANGE_ME@postgres:5432/agentrag
+  databaseSyncUrl: postgresql://agentrag:CHANGE_ME@postgres:5432/agentrag
+  redisUrl: redis://redis:6379/0
+  celeryBrokerUrl: redis://redis:6379/1
+  celeryResultBackend: redis://redis:6379/2
+  minioEndpoint: minio:9000
+
+# Secrets — provide via --set, a values override, or an external secret manager.
+secrets:
+  jwtSecret: CHANGE_ME_TO_A_LONG_RANDOM_STRING
+  minioAccessKey: CHANGE_ME
+  minioSecretKey: CHANGE_ME
+  openaiApiKey: ""
+  anthropicApiKey: ""
+  cohereApiKey: ""

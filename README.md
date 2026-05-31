@@ -82,44 +82,72 @@
 
 ## 🏗 Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        React Frontend                            │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
-│  │  Auth UI  │ │ Chat UI  │ │ Doc Mgmt │ │ Settings │           │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘           │
-│       └─────────────┴────────────┴─────────────┘                 │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │ HTTPS / WSS
-┌──────────────────────────▼───────────────────────────────────────┐
-│                     FastAPI Backend                               │
-│  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐          │
-│  │ Auth &   │ │ RAG      │ │ Agent    │ │ Rate       │          │
-│  │ RBAC     │ │ Engine   │ │ Engine   │ │ Limiter    │          │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬───────┘          │
-│       │             │            │             │                  │
-│  ┌────▼─────────────▼────────────▼─────────────▼───────┐         │
-│  │              Service Layer                           │         │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐            │         │
-│  │  │ Chunker  │ │ Embedder │ │ Retriever│            │         │
-│  │  ├──────────┤ ├──────────┤ ├──────────┤            │         │
-│  │  │ Extractor│ │ Ranker   │ │ Generator│            │         │
-│  │  └──────────┘ └──────────┘ └──────────┘            │         │
-│  └─────────────────────────────────────────────────────┘         │
-└──────┬─────────────┬─────────────┬─────────────┬────────────────┘
-       │             │             │             │
-┌──────▼──┐  ┌──────▼──┐  ┌──────▼──┐  ┌──────▼──┐
-│PostgreSQL│  │pgvector │  │  Redis  │  │ MinIO/  │
-│ + RLS    │  │Vector DB│  │Cache/RL │  │   S3    │
-└──────────┘  └─────────┘  └─────────┘  └─────────┘
-       │
-┌──────▼──────────────────┐
-│   Celery Workers        │
-│  ┌──────┐ ┌──────┐     │
-│  │Ingest│ │ OCR  │     │
-│  │Worker│ │Worker│ ... │
-│  └──────┘ └──────┘     │
-└─────────────────────────┘
+A full walkthrough is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). High-level view:
+
+```mermaid
+flowchart TB
+    BROWSER[Browser SPA]
+    APICLI[API and WebSocket clients]
+
+    subgraph Edge
+        FE[Frontend nginx-unprivileged]
+    end
+
+    BROWSER --> FE
+    FE -->|/api and /ws proxy| MW
+    APICLI -->|JWT or X-API-Key| MW
+
+    subgraph Backend[FastAPI backend non-root]
+        MW[Middleware: RequestContext, TenantContext, RateLimit]
+        AUTH[get_current_user: validate JWT, SET app.current_tenant for RLS]
+        ROUTES[Routes /api/v1: auth, collections, documents, query, agents, admin]
+        MW --> AUTH --> ROUTES
+
+        subgraph RAG[RAG pipeline]
+            direction LR
+            ENH[Enhance: HyDE, multi-query] --> RET[Hybrid retrieval: dense pgvector + BM25 + RRF]
+            RET --> RR[Re-rank: Cohere or local] --> MH[Multi-hop] --> CMP[Compression] --> KG[Knowledge graph] --> GEN[Generate + citations]
+        end
+        AGENTS[Agent orchestrator: ReAct + delegation]
+        ROUTES --> RAG
+        ROUTES --> AGENTS
+    end
+
+    subgraph Data[Datastores]
+        PG[(PostgreSQL + pgvector. RLS forced, role agentrag_app)]
+        REDIS[(Redis: cache, rate-limit, broker)]
+        MINIO[(MinIO or S3: blobs)]
+    end
+
+    AUTH --> PG
+    RAG --> PG
+    ROUTES --> REDIS
+    ROUTES --> MINIO
+
+    subgraph Workers[Celery non-root]
+        WORKER[Worker pool: extract, chunk, embed, graph]
+        BEAT[Beat scheduler]
+    end
+
+    ROUTES -->|enqueue| REDIS --> WORKER
+    BEAT --> REDIS
+    WORKER --> PG
+    WORKER --> MINIO
+
+    subgraph External[External providers]
+        OAI[OpenAI]
+        ANT[Anthropic]
+        COH[Cohere]
+        TAV[Tavily]
+    end
+
+    GEN --> OAI
+    GEN --> ANT
+    RR --> COH
+    AGENTS --> TAV
+    WORKER --> OAI
+
+    ALEMBIC[Alembic, owner role agentrag] -->|DDL only| PG
 ```
 
 ---
@@ -418,8 +446,15 @@ docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ### Kubernetes
-Helm charts are not included yet (roadmap). For now, deploy with the production
-compose file above, or translate it to manifests with a tool like `kompose`.
+A minimal Helm chart is in [`deploy/helm/agentrag`](deploy/helm/agentrag) (backend, Celery
+worker + beat, frontend, a pre-upgrade migration Job, and an env Secret). Postgres / Redis /
+MinIO are expected to be provided (managed services or their own charts) — wire them via
+`config.*` in `values.yaml`. Replace every `CHANGE_ME` first (with `APP_ENV=production` the
+app refuses to boot on default secrets).
+```bash
+helm install agentrag deploy/helm/agentrag \
+  --set secrets.jwtSecret=... --set config.databaseUrl=...
+```
 
 ### Environment Checklist
 - [ ] Set strong `JWT_SECRET`

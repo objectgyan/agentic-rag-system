@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agentrag
+description: Multi-tenant Agentic RAG-as-a-Service (backend, workers, frontend)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

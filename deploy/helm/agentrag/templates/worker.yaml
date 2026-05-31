@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentrag.fullname" . }}-worker
+  labels:
+    {{- include "agentrag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentrag
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentrag
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: worker
+    spec:
+      containers:
+        - name: worker
+          image: {{ .Values.image.backend }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - mkdir -p /tmp/prom_multiproc && celery -A app.core.celery_app worker -l info -c {{ .Values.worker.concurrency }} -Q celery,processing,rag
+          ports:
+            - name: metrics
+              containerPort: 9100
+          envFrom:
+            - secretRef:
+                name: {{ include "agentrag.fullname" . }}-env
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+{{- if .Values.beat.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentrag.fullname" . }}-beat
+  labels:
+    {{- include "agentrag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentrag
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: beat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentrag
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: beat
+    spec:
+      containers:
+        - name: beat
+          image: {{ .Values.image.backend }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["celery", "-A", "app.core.celery_app", "beat", "-l", "info"]
+          envFrom:
+            - secretRef:
+                name: {{ include "agentrag.fullname" . }}-env
+{{- end }}
