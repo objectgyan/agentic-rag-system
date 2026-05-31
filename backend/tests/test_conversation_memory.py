@@ -15,7 +15,7 @@ async def test_pipeline_forwards_history_to_generator(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        async def generate(self, query, chunks, conversation_history=None):
+        async def generate(self, query, chunks, conversation_history=None, graph_facts=None):
             captured["history"] = conversation_history
             return {"answer": "ok", "model_used": "t", "tokens_used": 1}
 
@@ -44,7 +44,7 @@ async def test_pipeline_history_defaults_to_none(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
 
-        async def generate(self, query, chunks, conversation_history=None):
+        async def generate(self, query, chunks, conversation_history=None, graph_facts=None):
             captured["history"] = conversation_history
             return {"answer": "ok", "model_used": "t", "tokens_used": 1}
 

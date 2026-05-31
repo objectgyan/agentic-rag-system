@@ -51,6 +51,7 @@ async def create_collection(
         chunk_strategy=req.chunk_strategy,
         chunk_size=str(req.chunk_size),
         chunk_overlap=str(req.chunk_overlap),
+        enable_graph=req.enable_graph,
     )
     db.add(collection)
     await db.commit()

@@ -49,6 +49,7 @@ class RAGPipeline:
         use_compression: bool = False,
         use_multi_hop: bool = False,
         max_hops: int = 2,
+        use_graph: bool = False,
     ) -> Dict[str, Any]:
         """Execute a full RAG query."""
         retrieval_start = time.time()
@@ -115,11 +116,24 @@ class RAGPipeline:
                 logger.warning("contextual compression failed; using raw chunks", exc_info=True)
                 degraded.append("compression")
 
+        # Knowledge-graph augmentation (A3): pull facts about entities in the query.
+        graph_facts: List[str] = []
+        if use_graph:
+            try:
+                from app.services.rag.graph import GraphService
+
+                graph_facts = await GraphService().query_facts(self.db, query, collection_ids)
+            except Exception:
+                logger.warning("knowledge-graph retrieval failed; answering without it", exc_info=True)
+                degraded.append("graph")
+
         retrieval_time = (time.time() - retrieval_start) * 1000
 
-        # Generate answer, conditioning on prior conversation turns when present (C1).
+        # Generate answer, conditioning on prior conversation turns (C1) and graph facts (A3).
         generator = GenerationService(model=model, temperature=temperature)
-        result = await generator.generate(query, all_chunks, conversation_history=conversation_history)
+        result = await generator.generate(
+            query, all_chunks, conversation_history=conversation_history, graph_facts=graph_facts
+        )
 
         # Build citations - only for sources actually cited in the answer
         citations = []
@@ -149,6 +163,7 @@ class RAGPipeline:
         result["retrieval_time_ms"] = retrieval_time
         result["degraded"] = degraded
         result["hops"] = hops
+        result["graph_facts"] = graph_facts
 
         # Optional RAG self-evaluation (C3) — opt-in because it costs extra LLM calls.
         result["evaluation"] = None

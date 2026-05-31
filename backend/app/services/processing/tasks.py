@@ -155,6 +155,20 @@ async def _run_processing(task, db, document_id: str, tenant_id: str):
             )
             db.add(chunk)
 
+        # Knowledge-graph extraction (A3), opt-in per collection. Best-effort: a failure
+        # here must not fail ingestion, since chunks/embeddings are the primary artifact.
+        if getattr(collection, "enable_graph", False):
+            try:
+                from app.services.rag.graph import GraphService
+
+                triples = await GraphService().extract_triples(content.text)
+                n = await GraphService().store(
+                    db, doc.tenant_id, doc.id, doc.collection_id, triples
+                )
+                logger.info("extracted %d knowledge-graph triples for %s", n, doc.original_filename)
+            except Exception:
+                logger.warning("knowledge-graph extraction failed for %s", doc.id, exc_info=True)
+
         doc.chunk_count = len(text_chunks)
         doc.status = DocumentStatus.COMPLETED
         doc.processed_at = datetime.now(timezone.utc)

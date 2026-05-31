@@ -118,6 +118,7 @@ async def query(
             use_compression=req.use_compression,
             use_multi_hop=req.use_multi_hop,
             max_hops=req.max_hops,
+            use_graph=req.use_graph,
         )
     except Exception:
         rag_queries_total.labels(status="error").inc()

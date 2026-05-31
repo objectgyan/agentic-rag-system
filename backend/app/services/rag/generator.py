@@ -39,9 +39,13 @@ class GenerationService:
         query: str,
         chunks: List[RetrievedChunk],
         conversation_history: Optional[List[dict]] = None,
+        graph_facts: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Generate an answer from context."""
         context = self._build_context(chunks)
+        if graph_facts:
+            kg = "\n".join(f"- {f}" for f in graph_facts)
+            context = f"[Knowledge Graph Facts]\n{kg}\n\n---\n\n{context}"
         messages = [{"role": "system", "content": self._build_system_prompt()}]
 
         if conversation_history:

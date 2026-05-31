@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
@@ -31,6 +31,8 @@ class Collection(Base):
     chunk_strategy = Column(String(50), default="semantic")
     chunk_size = Column(String(10), default="512")
     chunk_overlap = Column(String(10), default="50")
+    # When true, ingestion extracts knowledge-graph triples for this collection (A3).
+    enable_graph = Column(Boolean, default=False, server_default="false", nullable=False)
     metadata_schema = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

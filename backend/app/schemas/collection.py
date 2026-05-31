@@ -15,6 +15,8 @@ class CollectionCreate(BaseModel):
     chunk_strategy: str = "semantic"
     chunk_size: int = 512
     chunk_overlap: int = 50
+    # Extract knowledge-graph triples during ingestion for this collection (A3).
+    enable_graph: bool = False
 
 
 class CollectionUpdate(BaseModel):
@@ -30,6 +32,7 @@ class CollectionResponse(BaseModel):
     visibility: str
     embedding_model: Optional[str]
     chunk_strategy: str
+    enable_graph: bool = False
     document_count: int = 0
     created_at: datetime
     updated_at: datetime
