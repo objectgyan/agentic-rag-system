@@ -16,6 +16,18 @@ from app.services.rag.embedder import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
+# Cache the local cross-encoder per process — loading it pulls torch and is expensive.
+_local_reranker = None
+
+
+def _get_local_reranker(model_name: str):
+    global _local_reranker
+    if _local_reranker is None:
+        from sentence_transformers import CrossEncoder
+
+        _local_reranker = CrossEncoder(model_name)
+    return _local_reranker
+
 
 @dataclass
 class RetrievedChunk:
@@ -179,29 +191,56 @@ class HybridRetriever:
     async def _rerank(
         self, query: str, chunks: List[RetrievedChunk], top_k: int
     ) -> List[RetrievedChunk]:
-        """Re-rank using Cohere cross-encoder."""
-        if not settings.cohere_api_key:
-            return chunks[:top_k]
+        """Re-rank with Cohere if configured, else a local cross-encoder if configured.
 
-        try:
-            from app.core.llm_clients import cohere_client
-            client = cohere_client()
+        Re-ranking is best-effort: on any failure (provider down, quota, model load) we
+        fall back to the fusion order rather than failing retrieval (F12).
+        """
+        if not chunks:
+            return chunks
 
-            response = await client.rerank(
-                model=settings.default_reranker_model,
-                query=query,
-                documents=[c.content for c in chunks],
-                top_n=top_k,
-            )
+        if settings.cohere_api_key:
+            try:
+                return await self._rerank_cohere(query, chunks, top_k)
+            except Exception:
+                logger.warning("Cohere re-ranking failed; using fused order", exc_info=True)
+                return chunks[:top_k]
 
-            reranked = []
-            for r in response.results:
-                chunk = chunks[r.index]
-                chunk.score = r.relevance_score
-                reranked.append(chunk)
-            return reranked
-        except Exception:
-            # Re-ranking is best-effort: on any failure (Cohere down, quota, timeout)
-            # fall back to the fusion order rather than failing retrieval (F12).
-            logger.warning("cross-encoder re-ranking failed; using fused order", exc_info=True)
-            return chunks[:top_k]
+        if settings.local_reranker_model:
+            try:
+                return await self._rerank_local(query, chunks, top_k)
+            except Exception:
+                logger.warning("local re-ranking failed; using fused order", exc_info=True)
+                return chunks[:top_k]
+
+        return chunks[:top_k]
+
+    async def _rerank_cohere(self, query, chunks, top_k):
+        from app.core.llm_clients import cohere_client
+
+        response = await cohere_client().rerank(
+            model=settings.default_reranker_model,
+            query=query,
+            documents=[c.content for c in chunks],
+            top_n=top_k,
+        )
+        reranked = []
+        for r in response.results:
+            chunk = chunks[r.index]
+            chunk.score = r.relevance_score
+            reranked.append(chunk)
+        return reranked
+
+    async def _rerank_local(self, query, chunks, top_k):
+        import asyncio
+
+        model = _get_local_reranker(settings.local_reranker_model)
+        pairs = [(query, c.content) for c in chunks]
+        # CrossEncoder.predict is sync + CPU-bound; keep it off the event loop.
+        scores = await asyncio.to_thread(model.predict, pairs)
+        ranked = sorted(zip(chunks, scores), key=lambda cs: cs[1], reverse=True)[:top_k]
+        out = []
+        for chunk, score in ranked:
+            chunk.score = float(score)
+            out.append(chunk)
+        return out
