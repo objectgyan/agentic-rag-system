@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.schemas.agent import AgentExecuteRequest, AgentExecuteResponse
 from app.api.deps.auth import get_current_user
+from app.api.deps.access import assert_collections_accessible
 from app.services.agents.orchestrator import AgentOrchestrator
 
 router = APIRouter()
@@ -22,6 +23,7 @@ async def execute_agent(
 ):
     """Execute an agent task with full trace."""
     start = time.time()
+    await assert_collections_accessible(db, user, req.collection_ids)
     orchestrator = AgentOrchestrator(
         db=db,
         tenant_id=str(user.tenant_id),
@@ -46,6 +48,7 @@ async def stream_agent(
     db: AsyncSession = Depends(get_db),
 ):
     """Stream agent execution with step-by-step updates."""
+    await assert_collections_accessible(db, user, req.collection_ids)
     orchestrator = AgentOrchestrator(
         db=db,
         tenant_id=str(user.tenant_id),

@@ -10,6 +10,7 @@ from app.models.collection import Collection, CollectionVisibility
 from app.models.document import Document
 from app.schemas.collection import CollectionCreate, CollectionUpdate, CollectionResponse
 from app.api.deps.auth import get_current_user, require_member
+from app.api.deps.access import assert_collection_accessible
 from app.core.audit import create_audit_log
 from app.core.config import TierLimits
 
@@ -105,17 +106,7 @@ async def get_collection(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific collection."""
-    result = await db.execute(
-        select(Collection).where(
-            Collection.id == collection_id,
-            Collection.tenant_id == user.tenant_id,
-        )
-    )
-    collection = result.scalar_one_or_none()
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
-    if collection.visibility == "private" and collection.owner_id != user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    collection = await assert_collection_accessible(db, user, collection_id)
 
     doc_count = await db.execute(
         select(func.count()).select_from(Document).where(Document.collection_id == collection.id)
@@ -133,15 +124,9 @@ async def update_collection(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a collection's metadata."""
-    result = await db.execute(
-        select(Collection).where(
-            Collection.id == collection_id,
-            Collection.tenant_id == user.tenant_id,
-        )
-    )
-    collection = result.scalar_one_or_none()
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
+    # Tenant scope + private-owner enforcement (previously any member could edit
+    # another member's private collection).
+    collection = await assert_collection_accessible(db, user, collection_id)
 
     for field, value in req.model_dump(exclude_unset=True).items():
         setattr(collection, field, value)
@@ -158,15 +143,7 @@ async def delete_collection(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a collection and all its documents."""
-    result = await db.execute(
-        select(Collection).where(
-            Collection.id == collection_id,
-            Collection.tenant_id == user.tenant_id,
-        )
-    )
-    collection = result.scalar_one_or_none()
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
+    collection = await assert_collection_accessible(db, user, collection_id)
 
     await db.delete(collection)
     await db.commit()

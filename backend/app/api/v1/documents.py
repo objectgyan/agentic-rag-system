@@ -10,9 +10,9 @@ from app.core.database import get_db
 from app.core.storage import upload_file
 from app.models.user import User
 from app.models.document import Document, DocumentStatus, DocumentType
-from app.models.collection import Collection, CollectionVisibility
 from app.schemas.document import DocumentUploadResponse, DocumentResponse, DocumentURLIngest
 from app.api.deps.auth import get_current_user, require_member
+from app.api.deps.access import assert_collection_accessible
 from app.core.audit import create_audit_log
 
 router = APIRouter()
@@ -59,24 +59,8 @@ async def upload_documents(
     db: AsyncSession = Depends(get_db),
 ):
     """Upload one or more documents to a collection."""
-    try:
-        # Verify collection access
-        result = await db.execute(
-            select(Collection).where(
-                Collection.id == collection_id,
-                Collection.tenant_id == user.tenant_id,
-            )
-        )
-        collection = result.scalar_one_or_none()
-        if not collection:
-            raise HTTPException(status_code=404, detail="Collection not found")
-        if collection.visibility == "private" and collection.owner_id != user.id:
-            raise HTTPException(status_code=403, detail="Access denied to private collection")
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[DEBUG] Error during collection verification: {type(e).__name__}: {e}")
-        raise
+    # Verify collection access: tenant scope + private-owner enforcement (F2).
+    await assert_collection_accessible(db, user, collection_id)
 
     try:
         print(f"[DEBUG] Starting upload for {len(files)} files")
@@ -157,14 +141,7 @@ async def ingest_url(
     db: AsyncSession = Depends(get_db),
 ):
     """Ingest a document from a URL."""
-    result = await db.execute(
-        select(Collection).where(
-            Collection.id == req.collection_id,
-            Collection.tenant_id == user.tenant_id,
-        )
-    )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Collection not found")
+    await assert_collection_accessible(db, user, req.collection_id)
 
     doc = Document(
         tenant_id=user.tenant_id,

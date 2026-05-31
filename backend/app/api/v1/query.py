@@ -13,6 +13,7 @@ from app.schemas.query import (
     ConversationResponse, ChatMessage,
 )
 from app.api.deps.auth import get_current_user
+from app.api.deps.access import assert_collection_accessible, assert_collections_accessible
 from app.services.rag.pipeline import RAGPipeline
 from app.services.rag.retriever import HybridRetriever
 from uuid import UUID
@@ -31,6 +32,8 @@ async def query(
 ):
     """Execute a single RAG query."""
     start = time.time()
+    # Authorize the requested collections before retrieval touches them (F2).
+    await assert_collections_accessible(db, user, req.collection_ids)
     pipeline = RAGPipeline(db=db, tenant_id=str(user.tenant_id), user_id=str(user.id))
 
     result = await pipeline.query(
@@ -56,6 +59,8 @@ async def query_stream(
     db: AsyncSession = Depends(get_db),
 ):
     """Execute a RAG query with streaming response (SSE)."""
+    # Authorize before the stream starts — a 403 mid-SSE-stream is hard for clients to handle.
+    await assert_collections_accessible(db, user, req.collection_ids)
     pipeline = RAGPipeline(db=db, tenant_id=str(user.tenant_id), user_id=str(user.id))
 
     async def event_generator():
@@ -80,6 +85,9 @@ async def create_conversation(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new conversation."""
+    # A conversation may be scoped to a collection — verify access to it (F2).
+    if req.collection_id is not None:
+        await assert_collection_accessible(db, user, req.collection_id)
     conv = Conversation(
         tenant_id=user.tenant_id,
         user_id=user.id,
