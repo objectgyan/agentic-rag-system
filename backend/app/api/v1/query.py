@@ -104,6 +104,7 @@ async def query(
         temperature=req.temperature,
         include_citations=req.include_citations,
         conversation_history=history,
+        evaluate=req.evaluate,
     )
     total_time = (time.time() - start) * 1000
     result["generation_time_ms"] = total_time - result.get("retrieval_time_ms", 0)

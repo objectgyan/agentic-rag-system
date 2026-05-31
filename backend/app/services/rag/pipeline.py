@@ -43,6 +43,7 @@ class RAGPipeline:
         temperature: float = 0.1,
         include_citations: bool = True,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        evaluate: bool = False,
     ) -> Dict[str, Any]:
         """Execute a full RAG query."""
         retrieval_start = time.time()
@@ -120,6 +121,18 @@ class RAGPipeline:
         result["citations"] = citations
         result["retrieval_time_ms"] = retrieval_time
         result["degraded"] = degraded
+
+        # Optional RAG self-evaluation (C3) — opt-in because it costs extra LLM calls.
+        result["evaluation"] = None
+        if evaluate and all_chunks:
+            try:
+                from app.services.rag.evaluator import RAGEvaluator
+                evaluator = RAGEvaluator(model=model)
+                contexts = [c.content for c in all_chunks]
+                result["evaluation"] = await evaluator.evaluate(query, result["answer"], contexts)
+            except Exception:
+                logger.warning("RAG evaluation failed; returning answer without scores", exc_info=True)
+                degraded.append("evaluation")
 
         # Track usage
         await self._track_usage(result.get("tokens_used"), model)

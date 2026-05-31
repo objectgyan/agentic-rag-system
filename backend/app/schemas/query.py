@@ -19,6 +19,8 @@ class QueryRequest(BaseModel):
     use_multi_query: bool = False
     filters: Optional[dict] = None
     include_citations: bool = True
+    # Opt-in: run the RAG evaluator over the answer (extra LLM calls) and return scores (C3).
+    evaluate: bool = False
     temperature: float = Field(default=0.1, ge=0, le=2)
 
 
@@ -41,6 +43,8 @@ class QueryResponse(BaseModel):
     # Names of optional features that silently degraded (e.g. "hyde", "multi_query")
     # so a client/operator can see when an answer was produced on a reduced path (F12).
     degraded: List[str] = []
+    # RAG quality scores when evaluate=true was requested (C3); None otherwise.
+    evaluation: Optional[dict] = None
 
 
 class ConversationCreate(BaseModel):
