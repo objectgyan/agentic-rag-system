@@ -116,6 +116,8 @@ async def query(
             conversation_history=history,
             evaluate=req.evaluate,
             use_compression=req.use_compression,
+            use_multi_hop=req.use_multi_hop,
+            max_hops=req.max_hops,
         )
     except Exception:
         rag_queries_total.labels(status="error").inc()

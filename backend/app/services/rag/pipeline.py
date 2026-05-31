@@ -47,6 +47,8 @@ class RAGPipeline:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         evaluate: bool = False,
         use_compression: bool = False,
+        use_multi_hop: bool = False,
+        max_hops: int = 2,
     ) -> Dict[str, Any]:
         """Execute a full RAG query."""
         retrieval_start = time.time()
@@ -57,6 +59,7 @@ class RAGPipeline:
         search_query = query
         all_chunks: List[RetrievedChunk] = []
         degraded: List[str] = []
+        hops: List[str] = []
 
         if use_hyde:
             try:
@@ -87,6 +90,15 @@ class RAGPipeline:
                 all_chunks = await self.retriever._rerank(query, all_chunks, top_k)
             else:
                 all_chunks = all_chunks[:top_k]
+        elif use_multi_hop:
+            # Iterative retrieve -> reason -> retrieve (A1).
+            from app.services.rag.multihop import MultiHopRetriever
+
+            all_chunks, hops = await MultiHopRetriever(self.retriever, model=model).retrieve(
+                query, collection_ids=collection_ids, top_k=top_k, max_hops=max_hops
+            )
+            if use_reranking and all_chunks:
+                all_chunks = await self.retriever._rerank(query, all_chunks, top_k)
         else:
             all_chunks = await self.retriever.retrieve(
                 search_query, collection_ids=collection_ids, top_k=top_k, use_reranking=use_reranking
@@ -136,6 +148,7 @@ class RAGPipeline:
         result["citations"] = citations
         result["retrieval_time_ms"] = retrieval_time
         result["degraded"] = degraded
+        result["hops"] = hops
 
         # Optional RAG self-evaluation (C3) — opt-in because it costs extra LLM calls.
         result["evaluation"] = None

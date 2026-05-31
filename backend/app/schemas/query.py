@@ -20,6 +20,9 @@ class QueryRequest(BaseModel):
     use_multi_query: bool = False
     # Distill retrieved chunks to only query-relevant content before generation (A2).
     use_compression: bool = False
+    # Iterative retrieve -> reason -> retrieve for multi-part questions (A1).
+    use_multi_hop: bool = False
+    max_hops: int = Field(default=2, ge=1, le=4)
     filters: Optional[dict] = None
     include_citations: bool = True
     # Opt-in: run the RAG evaluator over the answer (extra LLM calls) and return scores (C3).
@@ -48,6 +51,8 @@ class QueryResponse(BaseModel):
     degraded: List[str] = []
     # RAG quality scores when evaluate=true was requested (C3); None otherwise.
     evaluation: Optional[dict] = None
+    # Follow-up queries issued during multi-hop retrieval (A1); empty if not used.
+    hops: List[str] = []
 
 
 class ConversationCreate(BaseModel):
