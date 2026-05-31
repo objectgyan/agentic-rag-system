@@ -1,9 +1,12 @@
 """Main RAG pipeline orchestrating retrieval, enhancement, and generation."""
 
+import logging
 import time
 import re
 from typing import List, Optional, Dict, Any, AsyncIterator, Set
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 from app.services.rag.retriever import HybridRetriever, RetrievedChunk
 from app.services.rag.embedder import EmbeddingService
 from app.services.rag.generator import GenerationService
@@ -43,16 +46,27 @@ class RAGPipeline:
         """Execute a full RAG query."""
         retrieval_start = time.time()
 
-        # Query enhancement
+        # Query enhancement. These are optional accelerators: if the enhancer LLM call
+        # fails, we log it and fall back to the plain query rather than failing the whole
+        # request, recording what degraded so it's visible in the response (F12).
         search_query = query
         all_chunks: List[RetrievedChunk] = []
+        degraded: List[str] = []
 
         if use_hyde:
-            hyde_doc = await self.query_enhancer.hyde_generate(query)
-            search_query = hyde_doc
+            try:
+                search_query = await self.query_enhancer.hyde_generate(query)
+            except Exception:
+                logger.warning("HyDE enhancement failed; falling back to plain query", exc_info=True)
+                degraded.append("hyde")
 
         if use_multi_query:
-            queries = await self.query_enhancer.multi_query_expand(query)
+            try:
+                queries = await self.query_enhancer.multi_query_expand(query)
+            except Exception:
+                logger.warning("multi-query expansion failed; using plain query", exc_info=True)
+                degraded.append("multi_query")
+                queries = []
             queries.append(query)
             seen_ids = set()
             for q in queries:
@@ -104,6 +118,7 @@ class RAGPipeline:
 
         result["citations"] = citations
         result["retrieval_time_ms"] = retrieval_time
+        result["degraded"] = degraded
 
         # Track usage
         await self._track_usage(result.get("tokens_used"), model)

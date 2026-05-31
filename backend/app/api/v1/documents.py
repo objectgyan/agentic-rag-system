@@ -234,13 +234,14 @@ async def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Delete from storage
+    # Delete from storage. Best-effort: a storage failure shouldn't block removing the
+    # DB record, but it must be logged (orphaned object, not a silent loss) (F12).
     if doc.storage_path:
         try:
             from app.core.storage import delete_file
             delete_file(doc.storage_path)
         except Exception:
-            pass
+            logger.warning("failed to delete storage object %s", doc.storage_path, exc_info=True)
 
     await db.delete(doc)
     await db.commit()

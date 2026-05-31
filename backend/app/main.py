@@ -1,11 +1,14 @@
 """FastAPI application entry point."""
 
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 from app.core.config import settings
 from app.core.logging import setup_logging
+
+logger = logging.getLogger(__name__)
 from app.middleware.rate_limiter import RateLimitMiddleware
 from app.middleware.tenant_context import TenantContextMiddleware
 from app.api.v1.router import api_router
@@ -19,7 +22,9 @@ async def lifespan(app: FastAPI):
         from app.core.storage import ensure_bucket
         ensure_bucket()
     except Exception:
-        pass
+        # Don't crash the whole API if object storage is briefly unreachable at boot,
+        # but make it loud — uploads will fail until this is resolved (F12).
+        logger.error("failed to ensure MinIO bucket at startup", exc_info=True)
     yield
     # Cleanup
     from app.core.redis import redis_client

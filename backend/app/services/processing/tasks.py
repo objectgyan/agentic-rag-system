@@ -1,9 +1,12 @@
 """Celery tasks for async document processing."""
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from app.core.celery_app import celery_app
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Import all models to ensure SQLAlchemy relationships are properly configured
 import app.models  # noqa: F401
@@ -83,11 +86,10 @@ async def _process_document_async(task, document_id: str, tenant_id: str):
                 chunk_overlap=int(collection.chunk_overlap),
             )
             text_chunks = chunker.chunk(content.text)
-            
-            print(f"[DEBUG] Created {len(text_chunks)} chunks for document {doc.original_filename}")
-            if text_chunks:
-                max_tokens = max(tc.token_count for tc in text_chunks)
-                print(f"[DEBUG] Largest chunk has {max_tokens} tokens")
+
+            logger.info(
+                "chunked document %s into %d chunks", doc.original_filename, len(text_chunks)
+            )
 
             # Embed chunks
             from app.services.rag.embedder import EmbeddingService

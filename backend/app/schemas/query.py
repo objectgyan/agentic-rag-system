@@ -35,6 +35,9 @@ class QueryResponse(BaseModel):
     tokens_used: Optional[int]
     retrieval_time_ms: float
     generation_time_ms: float
+    # Names of optional features that silently degraded (e.g. "hyde", "multi_query")
+    # so a client/operator can see when an answer was produced on a reduced path (F12).
+    degraded: List[str] = []
 
 
 class ConversationCreate(BaseModel):

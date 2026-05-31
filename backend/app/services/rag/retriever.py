@@ -1,5 +1,6 @@
 """Hybrid retriever: dense vector search + BM25 sparse search + re-ranking."""
 
+import logging
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 import numpy as np
@@ -9,6 +10,8 @@ from rank_bm25 import BM25Okapi
 from app.models.chunk import Chunk
 from app.services.rag.embedder import EmbeddingService
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -195,4 +198,7 @@ class HybridRetriever:
                 reranked.append(chunk)
             return reranked
         except Exception:
+            # Re-ranking is best-effort: on any failure (Cohere down, quota, timeout)
+            # fall back to the fusion order rather than failing retrieval (F12).
+            logger.warning("cross-encoder re-ranking failed; using fused order", exc_info=True)
             return chunks[:top_k]
