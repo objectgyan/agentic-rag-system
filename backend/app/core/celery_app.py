@@ -26,3 +26,6 @@ celery_app.conf.update(
 )
 
 celery_app.autodiscover_tasks(["app.services.processing"])
+
+# Importing this connects the worker_init signal that starts the metrics exporter.
+from app.core import worker_metrics  # noqa: E402,F401

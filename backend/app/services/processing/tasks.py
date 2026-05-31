@@ -9,6 +9,7 @@ from typing import Optional
 import app.models  # noqa: F401  -- ensure SQLAlchemy relationships are configured
 from app.core.celery_app import celery_app
 from app.core.config import settings
+from app.core.worker_metrics import documents_processed_total
 
 logger = logging.getLogger(__name__)
 
@@ -173,9 +174,11 @@ async def _run_processing(task, db, document_id: str, tenant_id: str):
         doc.status = DocumentStatus.COMPLETED
         doc.processed_at = datetime.now(timezone.utc)
         await db.commit()
+        documents_processed_total.labels(status="completed").inc()
 
     except Exception as e:
         await db.rollback()
+        documents_processed_total.labels(status="failed").inc()
         # Mark the document failed, then retry with exponential backoff + jitter (F13)
         # so a flaky upstream isn't hammered in lockstep across retries/workers.
         result = await db.execute(select(Document).where(Document.id == document_id))

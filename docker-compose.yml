@@ -90,12 +90,17 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       MINIO_ENDPOINT: minio:9000
+      # Worker metrics exporter (prefork-safe prometheus multiprocess mode).
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prom_multiproc
+      WORKER_METRICS_PORT: "9100"
+    ports:
+      - "9100:9100"   # worker /metrics (dev inspection / scraping)
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A app.core.celery_app worker -l info -c 4 -Q celery,processing,rag
+    command: sh -c "mkdir -p /tmp/prom_multiproc && celery -A app.core.celery_app worker -l info -c 4 -Q celery,processing,rag"
 
   celery-beat:
     build:
