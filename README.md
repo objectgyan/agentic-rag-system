@@ -8,6 +8,10 @@
 
 > **Enterprise-grade, multi-tenant Agentic RAG platform** with multi-modal ingestion, advanced retrieval strategies, agentic AI orchestration, and a beautiful React UI.
 
+> 📚 **New to the stack?** The [**Learning Guide**](docs/learn/README.md) explains every component
+> from scratch (assuming a .NET background, not Python), with diagrams and a rebuild-it-yourself path.
+> See also the [**Architecture diagram**](docs/ARCHITECTURE.md).
+
 ---
 
 ## 📋 Table of Contents
