@@ -22,6 +22,7 @@ export interface Collection {
   visibility: 'private' | 'shared' | 'public';
   embedding_model: string | null;
   chunk_strategy: string;
+  enable_graph: boolean;
   document_count: number;
   created_at: string;
   updated_at: string;
@@ -59,6 +60,25 @@ export interface QueryResponse {
   tokens_used: number | null;
   retrieval_time_ms: number;
   generation_time_ms: number;
+  // Advanced RAG metadata (backend Phases 1-3).
+  degraded: string[];
+  evaluation: Record<string, number> | null;
+  hops: string[];
+  graph_facts: string[];
+}
+
+// Optional retrieval/generation toggles a query can request.
+export interface QueryOptions {
+  use_reranking?: boolean;
+  use_hyde?: boolean;
+  use_multi_query?: boolean;
+  use_compression?: boolean;
+  use_multi_hop?: boolean;
+  use_graph?: boolean;
+  evaluate?: boolean;
+  conversation_id?: string;
+  top_k?: number;
+  model?: string;
 }
 
 export interface Conversation {

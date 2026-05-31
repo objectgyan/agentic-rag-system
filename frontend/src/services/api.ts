@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { TokenResponse, User, Collection, Document, QueryResponse, Conversation, ChatMessage, UsageStats } from '../types';
+import type { TokenResponse, User, Collection, Document, QueryResponse, QueryOptions, Conversation, ChatMessage, UsageStats } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -55,7 +55,7 @@ export const authApi = {
 export const collectionsApi = {
   list: () => api.get<Collection[]>('/collections'),
   get: (id: string) => api.get<Collection>(`/collections/${id}`),
-  create: (data: { name: string; description?: string; visibility?: string; chunk_strategy?: string }) =>
+  create: (data: { name: string; description?: string; visibility?: string; chunk_strategy?: string; chunk_size?: number; chunk_overlap?: number; enable_graph?: boolean }) =>
     api.post<Collection>('/collections', data),
   update: (id: string, data: Partial<Collection>) => api.patch<Collection>(`/collections/${id}`, data),
   delete: (id: string) => api.delete(`/collections/${id}`),
@@ -78,11 +78,11 @@ export const documentsApi = {
   delete: (id: string) => api.delete(`/documents/${id}`),
 };
 
-// Query
+// Query. `options` carries the advanced retrieval/generation toggles and conversation_id.
 export const queryApi = {
-  query: (data: { query: string; collection_ids?: string[]; model?: string; top_k?: number }) =>
+  query: (data: { query: string; collection_ids?: string[] } & QueryOptions) =>
     api.post<QueryResponse>('/query', data),
-  streamQuery: (data: { query: string; collection_ids?: string[] }) => {
+  streamQuery: (data: { query: string; collection_ids?: string[] } & QueryOptions) => {
     const token = localStorage.getItem('access_token');
     return fetch(`${API_URL}/api/v1/query/stream`, {
       method: 'POST',

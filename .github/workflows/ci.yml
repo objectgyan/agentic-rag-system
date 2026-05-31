@@ -21,6 +21,21 @@ jobs:
       - name: ruff check
         run: ruff check .
 
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      # `npm run build` runs `tsc` (typecheck) then `vite build`.
+      - run: npm run build
+
   test:
     name: Tests (pytest + live DB)
     runs-on: ubuntu-latest

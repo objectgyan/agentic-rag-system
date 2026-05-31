@@ -13,6 +13,7 @@ export default function CollectionsPage() {
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState('shared');
   const [chunkStrategy, setChunkStrategy] = useState('semantic');
+  const [enableGraph, setEnableGraph] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: collections, isLoading } = useQuery({
@@ -21,7 +22,7 @@ export default function CollectionsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => collectionsApi.create({ name, description, visibility, chunk_strategy: chunkStrategy }),
+    mutationFn: () => collectionsApi.create({ name, description, visibility, chunk_strategy: chunkStrategy, enable_graph: enableGraph }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['collections'] });
       setShowCreate(false);
@@ -86,6 +87,10 @@ export default function CollectionsPage() {
                   </select>
                 </div>
               </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input type="checkbox" checked={enableGraph} onChange={(e) => setEnableGraph(e.target.checked)} className="rounded" />
+                Extract a knowledge graph during ingestion (enables graph-augmented answers)
+              </label>
             </div>
             <div className="flex gap-3 mt-6 justify-end">
               <button onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
