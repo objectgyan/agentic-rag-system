@@ -42,3 +42,6 @@ Thumbs.db
 
 # MinIO data (if running locally)
 minio-data/
+
+# Windows / MSYS crash dumps
+*.stackdump
