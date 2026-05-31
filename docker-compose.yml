@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: agentrag
       POSTGRES_DB: agentrag
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -21,7 +21,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -55,7 +55,9 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://agentrag:agentrag@postgres:5432/agentrag
+      # Runtime app/worker connection uses the restricted, non-owner role so RLS
+      # actually applies (F9). Alembic uses the owner role via DATABASE_SYNC_URL.
+      DATABASE_URL: postgresql+asyncpg://agentrag_app:agentrag_app@postgres:5432/agentrag
       DATABASE_SYNC_URL: postgresql://agentrag:agentrag@postgres:5432/agentrag
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
@@ -80,7 +82,9 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://agentrag:agentrag@postgres:5432/agentrag
+      # Runtime app/worker connection uses the restricted, non-owner role so RLS
+      # actually applies (F9). Alembic uses the owner role via DATABASE_SYNC_URL.
+      DATABASE_URL: postgresql+asyncpg://agentrag_app:agentrag_app@postgres:5432/agentrag
       DATABASE_SYNC_URL: postgresql://agentrag:agentrag@postgres:5432/agentrag
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1

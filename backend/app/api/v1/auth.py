@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.core.database import get_db
+from app.core.database import get_db, set_tenant_context
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.config import settings
 from app.models.tenant import Tenant
@@ -75,7 +75,11 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     from datetime import datetime, timezone
     user.last_login = datetime.now(timezone.utc)
     await db.commit()
-    
+
+    # login does not go through get_current_user, so RLS context isn't set yet. Set it
+    # before writing the audit log, or the INSERT fails the policy WITH CHECK (F9/F10).
+    await set_tenant_context(db, str(user.tenant_id))
+
     # Create audit log
     await create_audit_log(
         db=db,

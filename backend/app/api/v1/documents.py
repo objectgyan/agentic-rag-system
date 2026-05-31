@@ -146,7 +146,7 @@ async def upload_documents(
     from app.services.processing.tasks import process_document
     for doc_id in doc_ids:
         try:
-            process_document.delay(doc_id)
+            process_document.delay(doc_id, str(user.tenant_id))
         except Exception:
             logger.warning("failed to queue processing for document %s", doc_id, exc_info=True)
 
@@ -176,7 +176,7 @@ async def ingest_url(
     await db.refresh(doc)
 
     from app.services.processing.tasks import process_document
-    process_document.delay(str(doc.id))
+    process_document.delay(str(doc.id), str(user.tenant_id))
 
     return DocumentUploadResponse.model_validate(doc)
 

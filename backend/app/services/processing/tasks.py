@@ -19,14 +19,15 @@ def run_async(coro):
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
-def process_document(self, document_id: str):
+def process_document(self, document_id: str, tenant_id: str):
     """Process a document: extract content, chunk, embed, and index."""
-    run_async(_process_document_async(self, document_id))
+    run_async(_process_document_async(self, document_id, tenant_id))
 
 
-async def _process_document_async(task, document_id: str):
+async def _process_document_async(task, document_id: str, tenant_id: str):
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
     from sqlalchemy import select
+    from app.core.database import set_tenant_context
     from app.models.document import Document, DocumentStatus
     from app.models.chunk import Chunk
     from app.models.collection import Collection
@@ -36,6 +37,12 @@ async def _process_document_async(task, document_id: str):
 
     async with Session() as db:
         try:
+            # Set tenant context BEFORE any tenant-scoped query (F10). The worker now
+            # connects as the restricted, RLS-subject role (F9): without this the
+            # document is invisible and the chunk INSERTs fail the policy WITH CHECK.
+            # tenant_id is supplied by the endpoint that enqueued this task.
+            await set_tenant_context(db, tenant_id)
+
             # Load document
             result = await db.execute(select(Document).where(Document.id == document_id))
             doc = result.scalar_one_or_none()
