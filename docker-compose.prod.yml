@@ -1,0 +1,173 @@
+# Production compose (O4). Standalone — run with:
+#   docker-compose -f docker-compose.prod.yml up -d
+#
+# Differences from the dev docker-compose.yml:
+#   - no source bind-mounts, no --reload; uvicorn runs with multiple workers
+#   - non-root containers (see Dockerfiles), restart policies, healthchecks, resource limits
+#   - Postgres/Redis/MinIO are NOT published to the host (internal network only)
+#   - only the frontend is exposed; it reverse-proxies /api to the backend
+#   - APP_ENV=production, which makes the app refuse to boot with default secrets (F8)
+#   - the app/worker connect as the restricted agentrag_app role; Alembic as the owner (F9)
+#
+# Requires a .env with strong JWT_SECRET and non-default MinIO/Postgres credentials.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentrag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-agentrag}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agentrag}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    env_file: .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY in .env}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      APP_ENV: production
+      TRUST_PROXY_HEADERS: "true"
+      DATABASE_URL: postgresql+asyncpg://agentrag_app:agentrag_app@postgres:5432/agentrag
+      DATABASE_SYNC_URL: postgresql://agentrag:agentrag@postgres:5432/agentrag
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://agentrag_app:agentrag_app@postgres:5432/agentrag
+      DATABASE_SYNC_URL: postgresql://agentrag:agentrag@postgres:5432/agentrag
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app worker -l info -c 4 -Q celery,processing,rag
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping -t 10 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      APP_ENV: production
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app beat -l info
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    # The only host-exposed service; it reverse-proxies /api to the backend.
+    ports:
+      - "80:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

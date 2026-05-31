@@ -1,0 +1,15 @@
+# Don't bloat the image with local/dev artifacts.
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.git/
+.gitignore
+*.stackdump
+.env
