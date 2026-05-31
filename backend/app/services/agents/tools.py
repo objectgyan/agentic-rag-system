@@ -9,39 +9,46 @@ from app.core.llm_clients import openai_client
 class ToolRegistry:
     """Manages available tools for agent execution."""
 
+    # Single source of truth for what tools actually exist. Every entry here MUST have a
+    # matching handler in execute_tool(); /agents/types derives its advertised tools from
+    # this so the API can't claim a capability that isn't wired up (C2).
+    TOOLS: List[dict] = [
+        {
+            "name": "retrieval",
+            "description": "Search through document collections. Input: {\"query\": \"search terms\", \"top_k\": 5}",
+        },
+        {
+            "name": "calculator",
+            "description": "Evaluate mathematical expressions. Input: {\"expression\": \"2 + 2\"}",
+        },
+        {
+            "name": "web_search",
+            "description": "Search the web for current information. Input: {\"query\": \"search terms\"}",
+        },
+        {
+            "name": "summarize",
+            "description": "Summarize a long text. Input: {\"text\": \"long text here\", \"max_length\": 200}",
+        },
+        {
+            "name": "compare",
+            "description": "Compare two pieces of text or data. Input: {\"text_a\": \"...\", \"text_b\": \"...\"}",
+        },
+    ]
+
     def __init__(self, db: AsyncSession, tenant_id: str, retriever: HybridRetriever):
         self.db = db
         self.tenant_id = tenant_id
         self.retriever = retriever
 
+    @classmethod
+    def available_tool_names(cls) -> List[str]:
+        return [t["name"] for t in cls.TOOLS]
+
     def get_tools(self, tool_names: Optional[List[str]] = None, collection_ids: Optional[List[str]] = None) -> List[dict]:
         """Get available tool descriptions."""
-        all_tools = [
-            {
-                "name": "retrieval",
-                "description": "Search through document collections. Input: {\"query\": \"search terms\", \"top_k\": 5}",
-            },
-            {
-                "name": "calculator",
-                "description": "Evaluate mathematical expressions. Input: {\"expression\": \"2 + 2\"}",
-            },
-            {
-                "name": "web_search",
-                "description": "Search the web for current information. Input: {\"query\": \"search terms\"}",
-            },
-            {
-                "name": "summarize",
-                "description": "Summarize a long text. Input: {\"text\": \"long text here\", \"max_length\": 200}",
-            },
-            {
-                "name": "compare",
-                "description": "Compare two pieces of text or data. Input: {\"text_a\": \"...\", \"text_b\": \"...\"}",
-            },
-        ]
-
         if tool_names:
-            return [t for t in all_tools if t["name"] in tool_names]
-        return all_tools
+            return [t for t in self.TOOLS if t["name"] in tool_names]
+        return list(self.TOOLS)
 
     async def execute_tool(self, tool_name: str, params: dict) -> str:
         """Execute a tool and return the result as a string."""
