@@ -13,6 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.access import assert_collection_accessible, assert_collections_accessible
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
+from app.core.metrics import (
+    rag_generation_seconds,
+    rag_queries_total,
+    rag_retrieval_seconds,
+)
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.user import User
 from app.schemas.query import (
@@ -97,21 +102,32 @@ async def query(
 
     pipeline = RAGPipeline(db=db, tenant_id=str(user.tenant_id), user_id=str(user.id))
 
-    result = await pipeline.query(
-        query=req.query,
-        collection_ids=[str(c) for c in req.collection_ids] if req.collection_ids else None,
-        top_k=req.top_k,
-        model=req.model,
-        use_reranking=req.use_reranking,
-        use_hyde=req.use_hyde,
-        use_multi_query=req.use_multi_query,
-        temperature=req.temperature,
-        include_citations=req.include_citations,
-        conversation_history=history,
-        evaluate=req.evaluate,
-    )
+    try:
+        result = await pipeline.query(
+            query=req.query,
+            collection_ids=[str(c) for c in req.collection_ids] if req.collection_ids else None,
+            top_k=req.top_k,
+            model=req.model,
+            use_reranking=req.use_reranking,
+            use_hyde=req.use_hyde,
+            use_multi_query=req.use_multi_query,
+            temperature=req.temperature,
+            include_citations=req.include_citations,
+            conversation_history=history,
+            evaluate=req.evaluate,
+        )
+    except Exception:
+        rag_queries_total.labels(status="error").inc()
+        raise
+
     total_time = (time.time() - start) * 1000
-    result["generation_time_ms"] = total_time - result.get("retrieval_time_ms", 0)
+    retrieval_ms = result.get("retrieval_time_ms", 0)
+    result["generation_time_ms"] = total_time - retrieval_ms
+
+    # Record domain metrics (O2).
+    rag_queries_total.labels(status="success").inc()
+    rag_retrieval_seconds.observe(retrieval_ms / 1000)
+    rag_generation_seconds.observe(result["generation_time_ms"] / 1000)
 
     # Persist both turns so the next message in this conversation has memory (C1).
     if conversation is not None:
