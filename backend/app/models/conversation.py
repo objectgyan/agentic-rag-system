@@ -36,6 +36,9 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # tenant_id is required for Row-Level Security (F3). Set it from the parent
+    # conversation's tenant_id whenever a Message is created.
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(SAEnum(MessageRole, name='messagerole', create_type=False), nullable=False)
     content = Column(Text, nullable=False)
