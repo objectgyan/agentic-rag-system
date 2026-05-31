@@ -277,14 +277,18 @@ real tools; `evaluate=true` returns RAG scores; web search is Tavily-or-honestly
 **Remaining known follow-ups (small, non-blocking):** worker metrics exporter (separate process), Helm
 charts (README now honestly marks these as roadmap), and a deeper mypy pass.
 
-### Phase 3 — The ambitious net-new features (the "AGI-adjacent" learning) — in progress
+### Phase 3 — The ambitious net-new features (the "AGI-adjacent" learning) — ✅ DONE (91 tests)
 - ✅ **A1** Multi-hop / recursive retrieval (`use_multi_hop`): iterative retrieve→reason→retrieve, adaptive
   (0 hops when the first pass suffices), follow-ups surfaced in `QueryResponse.hops`. Verified live.
 - ✅ **A2** Contextual compression (`use_compression`): a cheap model distills each chunk to query-relevant
   content and drops irrelevant chunks; fail-safe. Verified live (filler stripped, fact kept).
-- ⬜ **A3** Knowledge-graph retrieval (entity/relation extraction + graph-augmented retrieval) — biggest lift.
-- ⬜ **A4** Real multi-agent delegation (agents calling agents, not just different prompts).
-- ⬜ **A5** Honest README pass for any remaining unimplemented claims.
+- ✅ **A3** Knowledge-graph retrieval (`enable_graph` collection + `use_graph` query): worker extracts
+  (s,p,o) triples into `graph_edges` (RLS, migration 005); query-time 1-hop entity expansion augments
+  generation (`QueryResponse.graph_facts`). Verified live.
+- ✅ **A4** Multi-agent delegation: a `delegate` tool spawns a depth-bounded sub-agent (cap prevents
+  runaway recursion/cost). Verified (unit) + agent endpoint runs live.
+- ✅ **A5** Honest README pass: unimplemented sub-features (audio diarization, video frames, sitemap/
+  recursive crawl, OAuth SSO, local rerankers, YAML agents, WebSocket chat) marked _(roadmap)_.
 
 **Bonus reliability fixes found while testing A1:** chunker infinite-loop when `chunk_overlap >= chunk_size`
 (hung the worker — a DoS via collection config), and per-task event-loop wedging in the Celery worker
