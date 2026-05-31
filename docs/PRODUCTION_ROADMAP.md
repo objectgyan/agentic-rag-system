@@ -294,6 +294,16 @@ charts (README now honestly marks these as roadmap), and a deeper mypy pass.
 (hung the worker — a DoS via collection config), and per-task event-loop wedging in the Celery worker
 (`run_async` now reuses one loop per process). Both fixed with tests.
 
+### Frontend consistency pass — ✅ DONE
+
+Brought the React app up to date with the hardened backend: stateful chat (conversation memory via
+`conversation_id`, streaming path now persists/recalls turns), a retrieval-options panel
+(rerank/HyDE/multi-query/compression/multi-hop/graph/evaluate) that renders the rich response
+(`graph_facts`, `hops`, `evaluation`, `degraded`), an `enable_graph` toggle on collection creation, TS
+types matched to backend shapes, removal of the dead `useWebSocket` hook (non-existent endpoint), and a
+**frontend CI job** (`tsc` typecheck + `vite build`). The streaming endpoint gained conversation memory
+to support this (completing C1 for that path).
+
 ---
 
 ## Working agreement
