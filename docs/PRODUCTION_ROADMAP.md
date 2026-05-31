@@ -51,7 +51,9 @@ the five chunking strategies, and citation filtering. These are real and well-bu
 Ordered by dependency. Items 0.1 are safe and land first; the RLS enforcement (0.3) is the riskiest and
 lands only after the pieces it depends on are in place and tested.
 
-### 0.1 — Safe correctness fixes (no behavior risk)
+**Progress:** ✅ 0.1 (F1–F3) · ✅ 0.2 (F4–F8) · ⬜ 0.3 (F9–F10) · ⬜ 0.4 (F11–F13). 44 tests passing.
+
+### 0.1 — Safe correctness fixes (no behavior risk) — ✅ DONE
 
 #### F1 — Parameterize `set_tenant_context` (kill the f-string SQL)
 - **Problem:** `app/core/database.py:35` runs `sa_text(f"SET app.current_tenant = '{tenant_id}'")`.
@@ -84,7 +86,7 @@ lands only after the pieces it depends on are in place and tested.
   enable + (force) RLS with the standard tenant policy. Set `tenant_id` on message insert in the app.
 - **Verify:** With RLS enforced, querying `messages` as tenant A returns zero of tenant B's rows.
 
-### 0.2 — Security hardening
+### 0.2 — Security hardening — ✅ DONE
 
 #### F4 — Parameterize the pgvector dense search
 - **Problem:** `app/services/rag/retriever.py:78-86` builds the embedding literal by string-joining floats
@@ -138,6 +140,19 @@ lands only after the pieces it depends on are in place and tested.
     (new `DATABASE_URL` in docker-compose).
 - **Risk:** High. If any session forgets to `set_config('app.current_tenant', …)`, it now sees **zero**
   rows (fail-closed) — which will surface immediately in tests, by design.
+- **Discovered context-setting gaps (must fix as part of F9, else these break under FORCE RLS):** the
+  RLS policies have only a `USING` clause, so Postgres copies it to `WITH CHECK` — meaning **INSERTs**
+  into RLS tables also require the GUC to match. `login`/`register` insert `audit_logs` *before* any
+  tenant context is set (they don't depend on `get_current_user`), so they must call
+  `set_tenant_context` after loading the user/tenant. Reads/writes on `users`/`tenants` are safe (those
+  tables have no RLS). The Celery worker's chunk INSERTs are covered by F10.
+- **Migration/app split:** the backend container runs *both* `alembic upgrade head` and the app. Alembic
+  uses `DATABASE_SYNC_URL` (keep as owner `agentrag` — DDL needs ownership); the app/worker use
+  `DATABASE_URL` (point at the restricted `agentrag_app`). This cleanly separates migration privileges
+  from runtime privileges without a second container.
+- **Verification is non-destructive:** migration 004 creates the role + grants + FORCE RLS incrementally
+  on the existing DB; we recreate the backend/worker containers (not `down -v`) and test
+  register → login → upload → query live. No local data is destroyed.
 - **Verify (the money test):** Integration test using the `agentrag_app` role — set tenant A, insert/read;
   switch to tenant B, confirm A's rows are invisible; unset context, confirm zero rows.
 
