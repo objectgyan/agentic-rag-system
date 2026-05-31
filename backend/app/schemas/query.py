@@ -9,6 +9,9 @@ from datetime import datetime
 class QueryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=10000)
     collection_ids: Optional[List[UUID]] = None
+    # When set, the query is part of a conversation: prior turns are fed to the model as
+    # history and both this turn and the answer are persisted (C1).
+    conversation_id: Optional[UUID] = None
     model: Optional[str] = None
     top_k: int = Field(default=5, ge=1, le=50)
     use_reranking: bool = True

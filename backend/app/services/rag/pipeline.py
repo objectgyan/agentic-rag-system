@@ -42,6 +42,7 @@ class RAGPipeline:
         use_multi_query: bool = False,
         temperature: float = 0.1,
         include_citations: bool = True,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
         """Execute a full RAG query."""
         retrieval_start = time.time()
@@ -89,9 +90,9 @@ class RAGPipeline:
 
         retrieval_time = (time.time() - retrieval_start) * 1000
 
-        # Generate answer
+        # Generate answer, conditioning on prior conversation turns when present (C1).
         generator = GenerationService(model=model, temperature=temperature)
-        result = await generator.generate(query, all_chunks)
+        result = await generator.generate(query, all_chunks, conversation_history=conversation_history)
 
         # Build citations - only for sources actually cited in the answer
         citations = []

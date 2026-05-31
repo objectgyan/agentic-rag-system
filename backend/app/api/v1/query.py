@@ -23,6 +23,56 @@ from sqlalchemy import select, func
 router = APIRouter()
 
 
+async def _load_conversation_history(db: AsyncSession, user: User, conversation_id):
+    """Authorize a conversation and return (conversation, history) for C1.
+
+    history is a list of {role, content} dicts in chronological order, suitable to feed
+    the generator as prior turns. 404s if the conversation isn't the caller's.
+    """
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.tenant_id == user.tenant_id,
+            Conversation.user_id == user.id,
+        )
+    )
+    conversation = result.scalar_one_or_none()
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    msgs = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.asc())
+    )
+    history = [{"role": m.role.value, "content": m.content} for m in msgs.scalars().all()]
+    return conversation, history
+
+
+async def _persist_turn(db: AsyncSession, user: User, conversation, query_text, answer, citations):
+    """Persist the user turn and the assistant answer, and bump updated_at (C1).
+
+    tenant_id is set explicitly so the rows satisfy the messages RLS policy (F3).
+    """
+    from datetime import datetime, timezone
+
+    db.add(Message(
+        tenant_id=user.tenant_id,
+        conversation_id=conversation.id,
+        role=MessageRole.USER,
+        content=query_text,
+    ))
+    db.add(Message(
+        tenant_id=user.tenant_id,
+        conversation_id=conversation.id,
+        role=MessageRole.ASSISTANT,
+        content=answer,
+        citations=citations or [],
+    ))
+    conversation.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
 @router.post("", response_model=QueryResponse)
 @router.post("/", response_model=QueryResponse)
 async def query(
@@ -30,10 +80,17 @@ async def query(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Execute a single RAG query."""
+    """Execute a single RAG query (optionally within a conversation)."""
     start = time.time()
     # Authorize the requested collections before retrieval touches them (F2).
     await assert_collections_accessible(db, user, req.collection_ids)
+
+    # If this query belongs to a conversation, load prior turns as history (C1).
+    conversation = None
+    history = None
+    if req.conversation_id:
+        conversation, history = await _load_conversation_history(db, user, req.conversation_id)
+
     pipeline = RAGPipeline(db=db, tenant_id=str(user.tenant_id), user_id=str(user.id))
 
     result = await pipeline.query(
@@ -46,9 +103,15 @@ async def query(
         use_multi_query=req.use_multi_query,
         temperature=req.temperature,
         include_citations=req.include_citations,
+        conversation_history=history,
     )
     total_time = (time.time() - start) * 1000
     result["generation_time_ms"] = total_time - result.get("retrieval_time_ms", 0)
+
+    # Persist both turns so the next message in this conversation has memory (C1).
+    if conversation is not None:
+        await _persist_turn(db, user, conversation, req.query, result["answer"], result.get("citations"))
+
     return QueryResponse(**result)
 
 

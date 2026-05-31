@@ -40,7 +40,18 @@ class Message(Base):
     # conversation's tenant_id whenever a Message is created.
     tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
-    role = Column(SAEnum(MessageRole, name='messagerole', create_type=False), nullable=False)
+    # values_callable makes SQLAlchemy store the enum VALUE ('user') not the NAME ('USER'),
+    # matching the Postgres `messagerole` enum (created with lowercase values). Without
+    # this, inserts fail with "invalid input value for enum messagerole: USER" (C1).
+    role = Column(
+        SAEnum(
+            MessageRole,
+            name='messagerole',
+            create_type=False,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        nullable=False,
+    )
     content = Column(Text, nullable=False)
     citations = Column(JSONB, default=[])
     agent_trace = Column(JSONB, nullable=True)
