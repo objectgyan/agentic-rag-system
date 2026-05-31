@@ -9,6 +9,7 @@ from app.core.security import decode_token
 from app.models.user import User, UserRole
 from app.models.api_key import ApiKey
 from app.core.security import verify_password
+from datetime import datetime, timezone
 from typing import Optional
 
 security = HTTPBearer(auto_error=False)
@@ -55,10 +56,28 @@ async def get_user_from_api_key(
     api_key: str,
     db: AsyncSession,
 ) -> Optional[dict]:
-    """Validate an API key and return tenant info."""
-    result = await db.execute(select(ApiKey).where(ApiKey.is_active == True))
-    keys = result.scalars().all()
-    for k in keys:
+    """Validate an API key and return tenant info.
+
+    Looks up candidates by the indexed key_prefix (the first 10 chars), then bcrypt-
+    verifies only those — at most a handful, effectively O(1). The previous version
+    hashed the presented key against *every* active key in the system, an O(n) bcrypt
+    loop that is both a DoS vector and a latency cliff as keys accumulate. Expired keys
+    are skipped.
+    """
+    if not api_key:
+        return None
+
+    prefix = api_key[:10]
+    result = await db.execute(
+        select(ApiKey).where(
+            ApiKey.key_prefix == prefix,
+            ApiKey.is_active == True,
+        )
+    )
+    now = datetime.now(timezone.utc)
+    for k in result.scalars().all():
+        if k.expires_at and k.expires_at < now:
+            continue
         if verify_password(api_key, k.key_hash):
             return {"tenant_id": k.tenant_id, "key_id": k.id}
     return None

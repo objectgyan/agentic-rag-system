@@ -16,7 +16,7 @@ class ApiKey(Base):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     key_hash = Column(String(255), unique=True, nullable=False, index=True)
-    key_prefix = Column(String(10), nullable=False)  # First 8 chars for identification
+    key_prefix = Column(String(10), nullable=False, index=True)  # First chars; indexed for O(1) lookup (F6)
     is_active = Column(Boolean, default=True)
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
