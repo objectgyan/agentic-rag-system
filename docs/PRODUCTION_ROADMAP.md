@@ -277,12 +277,18 @@ real tools; `evaluate=true` returns RAG scores; web search is Tavily-or-honestly
 **Remaining known follow-ups (small, non-blocking):** worker metrics exporter (separate process), Helm
 charts (README now honestly marks these as roadmap), and a deeper mypy pass.
 
-### Phase 3 — The ambitious net-new features (the "AGI-adjacent" learning)
-- **A1** Multi-hop / recursive retrieval (iterative retrieve→reason→retrieve).
-- **A2** Contextual compression (LLM distills retrieved context before generation).
-- **A3** Knowledge-graph retrieval (entity/relation extraction + graph-augmented retrieval).
-- **A4** Real multi-agent delegation (agents calling agents, not just different prompts).
-- **A5** Honest README pass: mark genuinely-unimplemented claims as roadmap, not features.
+### Phase 3 — The ambitious net-new features (the "AGI-adjacent" learning) — in progress
+- ✅ **A1** Multi-hop / recursive retrieval (`use_multi_hop`): iterative retrieve→reason→retrieve, adaptive
+  (0 hops when the first pass suffices), follow-ups surfaced in `QueryResponse.hops`. Verified live.
+- ✅ **A2** Contextual compression (`use_compression`): a cheap model distills each chunk to query-relevant
+  content and drops irrelevant chunks; fail-safe. Verified live (filler stripped, fact kept).
+- ⬜ **A3** Knowledge-graph retrieval (entity/relation extraction + graph-augmented retrieval) — biggest lift.
+- ⬜ **A4** Real multi-agent delegation (agents calling agents, not just different prompts).
+- ⬜ **A5** Honest README pass for any remaining unimplemented claims.
+
+**Bonus reliability fixes found while testing A1:** chunker infinite-loop when `chunk_overlap >= chunk_size`
+(hung the worker — a DoS via collection config), and per-task event-loop wedging in the Celery worker
+(`run_async` now reuses one loop per process). Both fixed with tests.
 
 ---
 
