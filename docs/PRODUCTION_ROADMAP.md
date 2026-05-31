@@ -51,7 +51,8 @@ the five chunking strategies, and citation filtering. These are real and well-bu
 Ordered by dependency. Items 0.1 are safe and land first; the RLS enforcement (0.3) is the riskiest and
 lands only after the pieces it depends on are in place and tested.
 
-**Progress:** ✅ 0.1 (F1–F3) · ✅ 0.2 (F4–F8) · ✅ 0.3 (F9–F10) · ⬜ 0.4 (F11–F13). 46 tests passing.
+**Progress:** ✅ 0.1 (F1–F3) · ✅ 0.2 (F4–F8) · ✅ 0.3 (F9–F10) · ✅ 0.4 (F11–F13). **Phase 0 COMPLETE.**
+52 tests passing.
 
 **RLS is now real — validated live.** App + worker connect as the non-owner `agentrag_app` role;
 direct-DB proof showed `ctx=A` sees only A, an explicit `WHERE tenant=B` returns 0, no-context returns
@@ -175,7 +176,7 @@ upload → worker ingest → RAG query with citation) works under the restricted
   session before any tenant-scoped read/write. (Workers run as `agentrag_app` too.)
 - **Verify:** End-to-end upload → processed `completed` with chunks, under the enforced-RLS role.
 
-### 0.4 — Reliability (resilience of external calls)
+### 0.4 — Reliability (resilience of external calls) — ✅ DONE
 
 #### F11 — Timeouts + retries on every external API call
 - **Problem:** `embedder.py`, `generator.py`, `query_enhancer.py`, and the vision/rerank paths call
@@ -203,13 +204,16 @@ upload → worker ingest → RAG query with citation) works under the restricted
   distinctly from retryable ones.
 - **Verify:** Force an extractor error; observe backoff in worker logs and no connection-pool growth.
 
-### Phase 0 exit criteria
-- ✅ Isolation integration test passes under the `agentrag_app` (non-owner, FORCED-RLS) role.
-- ✅ End-to-end upload→process→query works under that role.
-- ✅ Brute-force, oversized-upload, and default-secret-boot are all blocked.
-- ✅ External-call failures retry/timeout and degrade observably instead of hanging or vanishing.
-- ✅ A `tests/` suite with fixtures + a disposable test DB covers the above (this is where real testing
-  begins; broader coverage is Phase 2).
+### Phase 0 exit criteria — ✅ ALL MET
+- ✅ Isolation integration test passes under the `agentrag_app` (non-owner) role (2 tests, skip w/o DB).
+- ✅ End-to-end upload→process→query works under that role (validated live, returns a cited answer).
+- ✅ Brute-force (429 after 10/min/IP), oversized-upload (413), and default-secret-boot are all blocked.
+- ✅ External-call failures retry/timeout (30s + 3 retries) and degrade observably (`QueryResponse.degraded`,
+  logged warnings) instead of hanging or vanishing.
+- ✅ A `tests/` suite (52 tests) covers the above; RLS integration tests run against the live DB. Broader
+  coverage (CI, ruff/mypy, more units) is Phase 2.
+
+**Done in 14 commits on `production-hardening`, each tracing to an item ID. Ready for Phase 1.**
 
 ---
 
