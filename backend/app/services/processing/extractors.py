@@ -232,59 +232,114 @@ class VideoExtractor:
 class URLExtractor:
     """Extract content from web URLs."""
 
+    _HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+    }
+
     async def extract(self, url: str, recursive: bool = False, max_pages: int = 10) -> ExtractedContent:
         import httpx
+
+        max_pages = max(1, min(max_pages, 50))  # hard cap so a crawl can't run away
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30, headers=self._HEADERS) as client:
+            if url.rstrip("/").lower().endswith("sitemap.xml"):
+                return await self._crawl_sitemap(client, url, max_pages)
+            if recursive:
+                return await self._crawl_recursive(client, url, max_pages)
+            text, title, _ = await self._fetch_page(client, url)
+            return ExtractedContent(text=text, metadata={"url": url, "title": title})
+
+    async def _fetch_page(self, client, url: str):
+        """Fetch one page; return (clean_text, title, outbound_links)."""
+        import re
+
         from bs4 import BeautifulSoup
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate, br",
-            "DNT": "1",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-        }
+        response = await client.get(url)
+        response.raise_for_status()
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30, headers=headers) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-
-        # Manually decode content to avoid BeautifulSoup encoding issues
-        # Try multiple encodings and pick the one that works
         html_text = None
-        for encoding in [response.encoding, 'utf-8', 'iso-8859-1', 'windows-1252', 'latin-1']:
+        for encoding in [response.encoding, "utf-8", "iso-8859-1", "windows-1252", "latin-1"]:
             if encoding:
                 try:
-                    html_text = response.content.decode(encoding, errors='strict')
-                    break  # Success, use this encoding
+                    html_text = response.content.decode(encoding, errors="strict")
+                    break
                 except (UnicodeDecodeError, LookupError):
                     continue
-
-        # If all else fails, use UTF-8 with ignore errors
         if html_text is None:
-            html_text = response.content.decode('utf-8', errors='ignore')
+            html_text = response.content.decode("utf-8", errors="ignore")
 
-        # Now parse the properly decoded text
         soup = BeautifulSoup(html_text, "html.parser")
-
+        # Collect links before stripping chrome (some live in nav).
+        links = [a.get("href") for a in soup.find_all("a", href=True)]
         for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
             tag.decompose()
-
         text = soup.get_text(separator="\n", strip=True)
-
-        # Clean up excessive whitespace and newlines
-        import re
-        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Replace 3+ newlines with 2
-        text = re.sub(r' +', ' ', text)  # Replace multiple spaces with single space
-        text = text.strip()
-
+        text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
+        text = re.sub(r" +", " ", text).strip()
         title = soup.title.string if soup.title else url
+        return text, title, links
 
+    async def _crawl_recursive(self, client, start_url: str, max_pages: int) -> ExtractedContent:
+        from urllib.parse import urlparse
+
+        domain = urlparse(start_url).netloc
+        seen = {start_url}
+        queue = [start_url]
+        pages = []
+        while queue and len(pages) < max_pages:
+            current = queue.pop(0)
+            try:
+                text, title, links = await self._fetch_page(client, current)
+            except Exception:
+                continue
+            pages.append(f"# {title}\n{current}\n\n{text}")
+            for nxt in self._same_domain_links(current, links, domain):
+                if nxt not in seen:
+                    seen.add(nxt)
+                    queue.append(nxt)
         return ExtractedContent(
-            text=text,
-            metadata={"url": url, "title": title, "status_code": response.status_code},
+            text="\n\n---\n\n".join(pages),
+            metadata={"url": start_url, "pages_crawled": len(pages), "mode": "recursive"},
         )
+
+    async def _crawl_sitemap(self, client, sitemap_url: str, max_pages: int) -> ExtractedContent:
+        response = await client.get(sitemap_url)
+        response.raise_for_status()
+        locs = self._parse_sitemap_locs(response.text)[:max_pages]
+        pages = []
+        for loc in locs:
+            try:
+                text, title, _ = await self._fetch_page(client, loc)
+                pages.append(f"# {title}\n{loc}\n\n{text}")
+            except Exception:
+                continue
+        return ExtractedContent(
+            text="\n\n---\n\n".join(pages),
+            metadata={"url": sitemap_url, "pages_crawled": len(pages), "mode": "sitemap"},
+        )
+
+    @staticmethod
+    def _same_domain_links(base_url: str, links, domain: str):
+        """Resolve links to absolute URLs and keep same-domain http(s) pages."""
+        from urllib.parse import urljoin, urlparse
+
+        out = []
+        for href in links:
+            if not href or href.startswith(("#", "mailto:", "javascript:")):
+                continue
+            absolute = urljoin(base_url, href).split("#")[0]
+            parsed = urlparse(absolute)
+            if parsed.scheme in ("http", "https") and parsed.netloc == domain:
+                out.append(absolute)
+        return out
+
+    @staticmethod
+    def _parse_sitemap_locs(xml_text: str):
+        import re
+
+        return [m.strip() for m in re.findall(r"<loc>\s*(.*?)\s*</loc>", xml_text, re.IGNORECASE)]
 
 
 def get_extractor(doc_type: str):

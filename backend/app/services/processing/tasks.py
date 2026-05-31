@@ -200,8 +200,13 @@ async def _extract_content(doc):
     from app.services.processing.extractors import AudioExtractor, URLExtractor, VideoExtractor, get_extractor
 
     if doc.doc_type == "url":
+        opts = doc.metadata_extra or {}
         extractor = URLExtractor()
-        return await extractor.extract(doc.source_url)
+        return await extractor.extract(
+            doc.source_url,
+            recursive=bool(opts.get("recursive", False)),
+            max_pages=int(opts.get("max_pages", 10)),
+        )
 
     if doc.doc_type == "audio":
         extractor = AudioExtractor()

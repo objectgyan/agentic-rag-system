@@ -172,6 +172,8 @@ async def ingest_url(
         doc_type=DocumentType.URL.value,
         status=DocumentStatus.PENDING.value,
         source_url=req.url,
+        # Crawl options the worker reads at extraction time.
+        metadata_extra={"recursive": req.recursive, "max_pages": req.max_pages},
     )
     db.add(doc)
     await db.commit()
