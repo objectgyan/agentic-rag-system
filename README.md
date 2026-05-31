@@ -33,13 +33,13 @@
 ### Multi-Modal Ingestion
 - 📄 **Documents**: PDF, DOCX, TXT, Markdown, CSV, XLSX, HTML
 - 🖼️ **Images**: OCR (Tesseract), Vision models (GPT-4V, Claude), EXIF extraction
-- 🎵 **Audio**: Whisper transcription, speaker diarization, chapter indexing
-- 🎬 **Video**: Frame extraction, audio transcription, scene detection
-- 🌐 **Web**: URL crawling, sitemap ingestion, recursive scraping
+- 🎵 **Audio**: Whisper transcription _(speaker diarization & chapter indexing: roadmap)_
+- 🎬 **Video**: Audio transcription via Whisper _(frame extraction & scene detection: roadmap)_
+- 🌐 **Web**: Single-URL ingestion _(sitemap & recursive crawling: roadmap)_
 
 ### Advanced RAG Pipeline
 - **Hybrid Search**: Dense (embeddings) + Sparse (BM25) + Keyword fusion
-- **Re-ranking**: Cross-encoder re-ranking (Cohere, local models)
+- **Re-ranking**: Cross-encoder re-ranking (Cohere) _(local cross-encoder models: roadmap)_
 - **Query Enhancement**: Multi-query expansion, HyDE (Hypothetical Document Embeddings)
 - **Chunking**: Fixed, semantic, recursive, document-structure-aware, parent-child
 - **Contextual Compression**: LLM-based context distillation
@@ -57,7 +57,7 @@
 ### Multi-Tenancy & Security
 - **Complete Tenant Isolation**: Row-level security in PostgreSQL
 - **User-Level Privacy**: Private collections within tenants
-- **Auth**: JWT + OAuth2 (Google, GitHub SSO)
+- **Auth**: JWT (access + refresh) _(OAuth2 Google/GitHub SSO: roadmap — config present, endpoints not yet implemented)_
 - **RBAC**: Admin, Member, Viewer roles with granular permissions
 - **User Management**: Create and manage tenant users with role assignment
 - **API Keys**: Per-tenant API key management
@@ -65,13 +65,18 @@
 - **Tier Management**: Visual interface for upgrading/downgrading tenant tiers with real-time feature comparison
 
 ### Production Ready
-- **Streaming**: SSE + WebSocket real-time responses
-- **Rate Limiting**: Tier-based (Free/Pro/Enterprise) with Redis
+- **Streaming**: SSE real-time responses _(WebSocket chat endpoint: roadmap)_
+- **Rate Limiting**: Tier-based (Free/Pro/Enterprise) with Redis, plus IP-keyed limits on auth
 - **Async Processing**: Celery workers for document ingestion
-- **Observability**: Structured logging, Prometheus metrics, health checks
+- **Observability**: Structured logging with request/tenant correlation, custom Prometheus metrics, health checks
 - **Database Migrations**: Alembic with zero-downtime migrations
-- **Docker**: Full docker-compose stack
+- **Docker**: Full docker-compose stack (dev) + hardened `docker-compose.prod.yml`
 - **OpenAPI**: Auto-generated Swagger/ReDoc documentation
+
+> **Implementation status:** the advanced RAG/agentic features above (hybrid search, HyDE/multi-query,
+> multi-hop retrieval, contextual compression, knowledge-graph retrieval, multi-agent delegation,
+> evaluation) are implemented and opt-in per request. Items marked _(roadmap)_ are not yet built.
+> See [`docs/PRODUCTION_ROADMAP.md`](docs/PRODUCTION_ROADMAP.md) for the full, honest status.
 
 ---
 
@@ -386,7 +391,7 @@ Query → Enhance → Search → Rank → Compress → Generate → Stream
 2. **Analyst Agent**: Data analysis, comparison, trend identification
 3. **Summarizer Agent**: Condensing large document sets
 4. **Code Agent**: Code understanding, generation, debugging from codebases
-5. **Custom Agents**: Define via YAML configuration
+5. **Custom Agents**: Define via YAML configuration _(roadmap)_
 
 ### Agent Orchestration
 ```python
