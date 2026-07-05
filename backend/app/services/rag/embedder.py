@@ -37,9 +37,48 @@ class EmbeddingService:
             return await self._embed_local(texts)
 
     async def embed_query(self, query: str) -> List[float]:
-        """Embed a single query."""
+        """Embed a single query, with a fail-soft Redis cache for repeated queries (item 5)."""
+        if settings.embedding_cache_enabled:
+            cached = await self._cache_get(query)
+            if cached is not None:
+                return cached
+
         results = await self.embed_texts([query])
-        return results[0] if results else []
+        vec = results[0] if results else []
+
+        if settings.embedding_cache_enabled and vec:
+            await self._cache_set(query, vec)
+        return vec
+
+    def _cache_key(self, text: str) -> str:
+        import hashlib
+
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return f"emb:{self.model}:{digest}"
+
+    async def _cache_get(self, text: str) -> Optional[List[float]]:
+        """Look up a cached embedding. Never raises — a cache miss/outage just means recompute."""
+        try:
+            import json
+
+            from app.core.redis import redis_client
+
+            raw = await redis_client.get(self._cache_key(text))
+            return json.loads(raw) if raw else None
+        except Exception:
+            return None
+
+    async def _cache_set(self, text: str, vec: List[float]) -> None:
+        try:
+            import json
+
+            from app.core.redis import redis_client
+
+            await redis_client.set(
+                self._cache_key(text), json.dumps(vec), ex=settings.embedding_cache_ttl_seconds
+            )
+        except Exception:
+            pass
 
     async def _embed_openai(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using OpenAI API."""

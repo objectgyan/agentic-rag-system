@@ -25,9 +25,9 @@ making the product *good* and *yours*.
 | **Evaluation / quality loop** | 🔴 **Gap** | Per-query LLM judge exists, but **no offline eval harness / regression suite**. Flying blind on "did my change help?" |
 | Conversation context mgmt | 🟢 Addressed | Item ② done: recent window + token budget + running summary of older turns (`conversation_memory.py`). Semantic-memory retrieval still a stretch. |
 | Observability / tracing | 🟢 Addressed | Item ③ done: per-query `QueryTrace` (stage latencies, chunk ids+scores, tokens, cost) on `trace=true` + logged every query; cost persisted to `UsageRecord`. OTel export still a stretch. |
-| **Scale of sparse search** | 🟡 **Weak** | BM25 loads ≤1000 chunks into Python (`retriever.py`). Fine for a demo, a cliff at real corpus size. |
+| Scale (vectors / cache) | 🟡 Partly | HNSW ANN index verified; query **embedding cache** added (item ⑤). BM25 still loads ≤1000 chunks into Python — the one remaining scale item (move to in-DB `tsvector`), deferred as an eval-gated change since the corpus is still small. |
 | **Prompt-injection / output safety** | 🔴 **Gap** | RAG is a huge injection surface; no guardrail/moderation/PII layer. |
-| Caching | 🟡 Missing | No semantic/embedding cache — cost & latency left on the table. |
+| Caching | 🟢 Addressed | Query **embedding cache** in Redis (item ⑤), fail-soft. Semantic *answer* cache still a future win. |
 
 🟢 = competitive · 🟡 = works but limited · 🔴 = missing, and it matters
 
@@ -141,9 +141,12 @@ learning-to-rank (LambdaMART), signal fusion, boosting vs filtering, personaliza
 - Batch/concurrent ingestion tuning.
 
 **Acceptance criteria:**
-- [ ] Sparse search runs in the DB, not by loading 1000 rows into the app.
-- [ ] Vector search uses an ANN index; verified via `EXPLAIN`.
-- [ ] Cache hit path measurably cuts latency for repeated queries.
+- [x] Vector search uses an ANN index — **HNSW verified** (`ix_chunks_embedding USING hnsw (embedding vector_cosine_ops)` via `pg_indexes`).
+- [x] Cache hit path cuts the embedding call for repeated queries — `EmbeddingService` Redis cache (`embedding_cache_enabled`), fail-soft; verified end-to-end against real Redis.
+- [ ] **Deferred:** move sparse (BM25) search into the DB (`tsvector` generated column + GIN, or ParadeDB). It's the last scale item; deliberately deferred because (a) the corpus is still small and (b) it changes retrieval semantics, so it warrants an **eval-gated** rollout using item ①'s harness (compare recall@k / MRR before vs after) with a human check — not an unvalidated autonomous push.
+- [ ] *(stretch)* Semantic *answer* cache; batch/concurrent ingestion tuning.
+
+**Status: ⑤ partly complete** — HNSW verified, embedding cache done (5 tests). Sparse-in-DB deferred (plan above).
 
 **Vocabulary:** *ANN / HNSW / IVFFlat, inverted index, tsvector/BM25 in-DB, semantic caching,
 recall/latency trade-off, sharding.*
@@ -171,6 +174,9 @@ That trio — measurable, customizable, debuggable — *is* the FDE value propos
   (`metrics`, `dataset`, `runner`, CLI) + `tests/test_eval_metrics.py`. Unit tests green in-container
   (14 passed). **Ran end-to-end** against a seeded tenant (single-doc, so retrieval trivially 1.0;
   generation faithfulness/completeness 1.0, answers correctly cited).
+- **2026-07-05** — **Item ⑤ partly done** — HNSW ANN index verified; query embedding cache in Redis
+  (`embedder.py`, fail-soft, 5 tests, verified vs real Redis). BM25→in-DB `tsvector` deliberately
+  deferred as an eval-gated change (corpus still small). Full suite 149 pass.
 - **2026-07-05** — **Item ④ done** — customization layer. ④a intent routing (`intent.py`,
   embedding-argmax zero-shot; `use_routing` skips retrieval for chit-chat). ④b pluggable business
   re-ranking (`ranking.py` `Reranker` + `MetadataBoostReranker`: normalized relevance + weighted

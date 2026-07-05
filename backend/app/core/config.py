@@ -119,6 +119,11 @@ class Settings(BaseSettings):
     conversation_token_budget: int = 1500
     conversation_summary_enabled: bool = True
 
+    # Query embedding cache (competitive-phase item 5): cache query embeddings in Redis so a
+    # repeated question skips the embedding API call. Keyed by (model, sha256(text)). Fail-soft.
+    embedding_cache_enabled: bool = True
+    embedding_cache_ttl_seconds: int = 86400
+
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
