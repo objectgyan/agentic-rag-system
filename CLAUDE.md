@@ -43,7 +43,7 @@ cd frontend && npm test         # vitest
 Tenant isolation is the central invariant. Two layers enforce it:
 1. **`TenantContextMiddleware`** (`app/middleware/tenant_context.py`) decodes the JWT (or `X-API-Key`) and stamps `request.state.tenant_id`/`tenant_tier`/`user_id`.
 2. **`RateLimitMiddleware`** reads that tier and applies a Redis sliding-window limit (`TierLimits` in `app/core/config.py`).
-3. The **`get_current_user`** dependency (`app/api/deps/auth.py`) re-validates the JWT, loads the `User`, and calls **`set_tenant_context`** which runs `SET app.current_tenant = '<id>'` so Postgres Row-Level Security policies (defined in `backend/init.sql`) scope every query. **Any route touching tenant data must depend on `get_current_user`** (or `require_admin`/`require_member`) — without it, RLS context is never set.
+3. The **`get_current_user`** dependency (`app/api/deps/auth.py`) re-validates the JWT, loads the `User`, and calls **`set_tenant_context`** which runs `SELECT set_config('app.current_tenant', '<id>', false)` (bound param, not string-interpolated — F1) so Postgres Row-Level Security policies (created in the Alembic migrations — `backend/init.sql` only enables extensions) scope every query. **Any route touching tenant data must depend on `get_current_user`** (or `require_admin`/`require_member`) — without it, RLS context is never set.
 
 Middleware sets state but does NOT authenticate; the dependency is the enforcement point. Tiers are `free`/`pro`/`enterprise`; `TierLimits.get()` is the source of truth for limits (the README table can drift from it).
 
@@ -65,7 +65,7 @@ Celery specifics: tasks are sync wrappers that run async coroutines via `run_asy
 SQLAlchemy models in `app/models/` (tenant, user, api_key, collection, document, chunk, conversation, usage, audit_log) all carry `tenant_id`. Routes are versioned under `/api/v1` and aggregated in `app/api/v1/router.py` (auth, collections, documents, query, agents, admin, health). Admin actions are recorded via `app/core/audit.py` (`user.login`, `user.created`, `documents.uploaded`, `collection.created`, `tenant.tier_updated`).
 
 ### Frontend (`frontend/src/`)
-React 18 + Vite + Tailwind. State via Zustand (`store/authStore.ts`, `store/themeStore.ts`), data fetching via TanStack Query, API client in `services/api.ts`, streaming chat via `hooks/useWebSocket.ts`. Built/served behind nginx (`nginx.conf`) in the container. Env: `VITE_API_URL`, `VITE_WS_URL`.
+React 18 + Vite + Tailwind. State via Zustand (`store/authStore.ts`, `store/themeStore.ts`), data fetching via TanStack Query, API client in `services/api.ts`, streaming chat over SSE via the API client (the old `useWebSocket` hook was removed). Built/served behind nginx (`nginx.conf`) in the container. Env: `VITE_API_URL`, `VITE_WS_URL`.
 
 ## Conventions & gotchas
 - **Async everywhere** on the backend: SQLAlchemy async sessions, `asyncpg` driver. Use `await db.execute(select(...))`. Sync URL (`database_sync_url`) exists only for Alembic.

@@ -1,4 +1,7 @@
-"""Authentication endpoints: register, login, refresh, OAuth2, API keys."""
+"""Authentication endpoints: register, login, refresh, current user, API keys.
+
+(OAuth2 SSO fields exist on the User model + config but no OAuth endpoint is implemented yet.)
+"""
 
 import re
 

@@ -76,7 +76,7 @@ and *that* embedded instead.
 
 ## 5. Hybrid retrieval — the core
 
-`HybridRetriever.retrieve()` runs two searches in parallel and fuses them:
+`HybridRetriever.retrieve()` runs two searches (dense then sparse) and fuses them:
 
 **5a. Dense search.** The query is embedded (`EmbeddingService.embed_query` → OpenAI
 `text-embedding-3-small` → a 1536-dim vector), then pgvector finds the nearest chunk vectors by

@@ -21,7 +21,6 @@ anthropic==0.18.0
 cohere==4.47
 tiktoken==0.6.0
 sentence-transformers==2.3.1
-rank-bm25==0.2.2
 numpy==1.26.4
 pandas==2.2.0
 pypdf==4.0.1

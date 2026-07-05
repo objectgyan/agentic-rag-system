@@ -39,7 +39,7 @@
 - 🖼️ **Images**: OCR (Tesseract), Vision models (GPT-4V, Claude), EXIF extraction
 - 🎵 **Audio**: Whisper transcription _(speaker diarization & chapter indexing: roadmap)_
 - 🎬 **Video**: Audio transcription via Whisper _(frame extraction & scene detection: roadmap)_
-- 🌐 **Web**: Single-URL ingestion _(sitemap & recursive crawling: roadmap)_
+- 🌐 **Web**: Single-URL, recursive (same-domain BFS), and sitemap crawling with a `max_pages` cap
 
 ### Advanced RAG Pipeline
 - **Hybrid Search**: Dense (pgvector embeddings) + Sparse (in-DB Postgres full-text search) fused with RRF
@@ -59,7 +59,7 @@
 ### Agentic AI
 - **Agent Orchestration**: Multi-step reasoning with tool use
 - **Autonomous Planning**: Query decomposition and retrieval planning
-- **Tool Integration**: Calculator, web search, code execution, API calls
+- **Tool Integration**: Retrieval, calculator, web search, summarize, compare, and multi-agent delegation
 - **Chain-of-Thought**: Transparent reasoning with step-by-step traces
 - **Multi-Agent**: Specialized agents (researcher, summarizer, analyst) with delegation
 
@@ -74,7 +74,7 @@
 - **Tier Management**: Visual interface for upgrading/downgrading tenant tiers with real-time feature comparison
 
 ### Production Ready
-- **Streaming**: SSE real-time responses _(WebSocket chat endpoint: roadmap)_
+- **Streaming**: SSE real-time responses + a WebSocket chat endpoint (`/api/v1/query/ws/chat`)
 - **Rate Limiting**: Tier-based (Free/Pro/Enterprise) with Redis, plus IP-keyed limits on auth
 - **Async Processing**: Celery workers for document ingestion
 - **Observability**: Structured logging with request/tenant correlation, custom Prometheus metrics, health checks
@@ -177,7 +177,7 @@ flowchart TB
 | Built-in eval metrics | ✅ | ❌ | ❌ | ❌ |
 | Streaming (SSE+WS) | ✅ | ✅ | ⚠️ Basic | ⚠️ Basic |
 | Tiered rate limiting | ✅ | ✅ | ❌ | ❌ |
-| OAuth2 SSO | ✅ | ✅ | ❌ | ❌ |
+| OAuth2 SSO | ⚠️ Config-only (endpoints: roadmap) | ✅ | ❌ | ❌ |
 | React UI (mobile-ready) | ✅ | ✅ | ❌ | ❌ |
 | Docker one-command deploy | ✅ | ✅ | ❌ | ❌ |
 | Audit logging | ✅ | ✅ | ❌ | ❌ |
@@ -212,7 +212,7 @@ This starts: PostgreSQL + pgvector, Redis, MinIO, FastAPI backend, Celery worker
 
 ### 3. Access
 
-- **Frontend**: http://localhost:3000
+- **Frontend**: http://localhost:3001
 - **API Docs**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
@@ -233,7 +233,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgresql+asyncpg://...` | PostgreSQL connection |
-| `REDIS_URL` | `redis://localhost:6379` | Redis for cache + rate limiting |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis for cache + rate limiting |
 | `MINIO_ENDPOINT` | `localhost:9000` | Object storage |
 | `OPENAI_API_KEY` | — | OpenAI API key |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key |
@@ -250,7 +250,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 ```yaml
 tiers:
   free:
-    requests_per_minute: 10
+    requests_per_minute: 100   # NB: TierLimits in config.py is the source of truth
     documents_per_month: 50
     storage_gb: 1
     max_collections: 5
@@ -262,7 +262,7 @@ tiers:
     storage_gb: 50
     max_collections: 50
     concurrent_queries: 10
-    models: [gpt-4o, gpt-4o-mini, claude-3-5-sonnet]
+    models: [gpt-4o, gpt-4o-mini, claude-3-5-sonnet-20241022]
   enterprise:
     requests_per_minute: 300
     documents_per_month: unlimited
@@ -282,7 +282,7 @@ tiers:
 | POST | `/api/v1/auth/register` | Register new org + admin |
 | POST | `/api/v1/auth/login` | Login, get JWT |
 | POST | `/api/v1/auth/refresh` | Refresh JWT token |
-| GET | `/api/v1/auth/oauth/{provider}` | OAuth2 redirect |
+| GET | `/api/v1/auth/me` | Current authenticated user |
 | POST | `/api/v1/auth/api-keys` | Create API key |
 
 ### Collections
@@ -299,7 +299,7 @@ tiers:
 | POST | `/api/v1/documents/upload` | Upload document(s) |
 | POST | `/api/v1/documents/url` | Ingest from URL |
 | GET | `/api/v1/documents` | List documents |
-| GET | `/api/v1/documents/{id}/status` | Processing status |
+| GET | `/api/v1/documents/{id}` | Document details + processing status |
 | DELETE | `/api/v1/documents/{id}` | Delete document |
 
 ### Query & Chat
@@ -307,9 +307,9 @@ tiers:
 |--------|----------|-------------|
 | POST | `/api/v1/query` | Single RAG query |
 | POST | `/api/v1/query/stream` | Streaming RAG query (SSE) |
-| WS | `/api/v1/ws/chat` | WebSocket chat |
-| POST | `/api/v1/chat/conversations` | Create conversation |
-| GET | `/api/v1/chat/conversations` | List conversations |
+| WS | `/api/v1/query/ws/chat` | WebSocket chat |
+| POST | `/api/v1/query/conversations` | Create conversation |
+| GET | `/api/v1/query/conversations` | List conversations |
 
 ### Agents
 | Method | Endpoint | Description |
@@ -432,13 +432,13 @@ Query → Enhance → Search → Rank → Compress → Generate → Stream
 
 ### Agent Orchestration
 ```python
-# Agents can use tools, delegate to other agents, and reason step-by-step
-agent = AgentExecutor(
-    tools=[retrieval_tool, calculator_tool, web_search_tool],
-    llm=tenant_llm,
-    strategy="react",  # ReAct reasoning
-    max_steps=10,
-)
+# Agents can use tools, delegate to other agents, and reason step-by-step (illustrative)
+orchestrator = AgentOrchestrator(db=db, tenant_id=tenant_id, user_id=user_id)  # app/services/agents/orchestrator.py
+result = await orchestrator.execute(
+    task="...",
+    agent_type="research",   # research | analyst | summarizer | code
+    model="gpt-4o-mini",
+)  # ReAct loop (Thought/Action/Observation) over a ToolRegistry
 ```
 
 ---
