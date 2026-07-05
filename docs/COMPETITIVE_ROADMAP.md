@@ -11,6 +11,12 @@ making the product *good* and *yours*.
 > plumbing** (built) but the **quality loop** (measure → improve) and **scale**. Those are exactly
 > the parts most portfolio projects skip — and where an FDE earns their keep.
 
+> **✅ PHASE COMPLETE (2026-07-05).** All five items shipped to `main`: ① eval harness · ② conversation
+> memory · ③ observability/tracing · ④ intent routing + business re-ranking · ⑤ scale (HNSW verified,
+> embedding cache, sparse search moved in-DB). Full suite 149 passed, ruff clean; every feature
+> verified end-to-end. See **Deliberate non-goals** at the bottom for what was intentionally *not*
+> built and why.
+
 ---
 
 ## Where we stand — honest scorecard
@@ -165,6 +171,31 @@ pluggable retrieval/rerank) is *built* for rapid per-customer customization. So 
 3. Keep everything **debuggable** (③) so you can support it in production.
 
 That trio — measurable, customizable, debuggable — *is* the FDE value proposition.
+
+---
+
+## Deliberate non-goals (intentionally *not* built)
+
+These are decisions, not omissions — each is a real future option, deferred with a reason so the
+backlog stays honest.
+
+- **Semantic *answer* cache** — caching full answers keyed by query similarity. Deferred: RAG
+  answers depend on a corpus that changes via ingestion, so a correct answer cache needs
+  invalidation-on-ingest and a similarity threshold that won't serve a *wrong* neighbor's answer.
+  That correctness risk outweighs the latency win at this scale. The **embedding** cache (⑤,
+  shipped) captures most of the cost benefit safely.
+- **Semantic conversation memory** — retrieving the most *relevant* past turns (not just the recent
+  window) by embedding them. The shipped window + running-summary (②) covers long chats well; this
+  is a refinement to add only if summaries start dropping needed detail.
+- **OpenTelemetry / Langfuse export** — the ③ trace is a structured object attached to the response
+  and logged every query, which is the actual debugging value. Wiring an OTel exporter needs a
+  collector to be useful and adds a dependency; deferred until there's somewhere to send spans.
+- **Learning-to-Rank (④)** — the `Reranker` interface is ready for a LambdaMART/GBDT model, but
+  training one needs logged click/conversion data the app doesn't have yet. Hand-tuned boosts are
+  the right stage until then.
+
+None of these blocks the FDE value proposition (measurable, customizable, debuggable), which is
+fully in place.
 
 ---
 
