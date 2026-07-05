@@ -1,0 +1,18 @@
+{
+  "_comment": "Golden dataset example. Replace the questions and ids with ones from YOUR ingested corpus. 'relevant_chunk_ids' (or 'relevant_document_ids') are the chunk/document UUIDs a human judged correct for that question — that's what drives the retrieval metrics. 'ground_truth' and 'answer_must_contain' are optional and drive the answer checks.",
+  "cases": [
+    {
+      "id": "refund-policy",
+      "question": "What is the refund policy for enterprise customers?",
+      "relevant_document_ids": ["REPLACE-WITH-A-REAL-DOCUMENT-UUID"],
+      "ground_truth": "Enterprise customers may request a full refund within 30 days of purchase.",
+      "answer_must_contain": ["30 days"]
+    },
+    {
+      "id": "onboarding-steps",
+      "question": "How do I onboard a new team member?",
+      "relevant_chunk_ids": ["REPLACE-WITH-A-REAL-CHUNK-UUID"],
+      "answer_must_contain": ["invite"]
+    }
+  ]
+}

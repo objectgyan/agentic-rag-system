@@ -30,6 +30,9 @@ you can read the actual code alongside the explanation.
 | 09 | [The frontend](10-frontend.md) | React, Vite, Zustand, TanStack Query, streaming over SSE/WebSocket |
 | 10 | [Ops, Docker & deploy](11-ops-and-deploy.md) | Containers, compose, CI, metrics, logging, Helm |
 | 11 | [Build it yourself](12-build-it-yourself.md) | A staged plan to rebuild this from an empty folder |
+| 12 | [The RAG glossary](13-rag-glossary.md) | **Talk the AI language** — every term (dense/sparse/hybrid, BM25, RRF, cross-encoder, chunking strategies, HyDE, faithfulness…) with its repo pointer |
+| 13 | [A query, traced end-to-end](14-query-trace.md) | One real question followed through every hop, naming the tech at each step |
+| 14 | [Measuring quality (evaluation)](15-evaluation.md) | The eval harness: golden sets, recall@k / MRR / nDCG, faithfulness, LLM-as-judge, regression gating |
 
 ## The 60-second mental model
 

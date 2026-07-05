@@ -127,4 +127,4 @@ attack. If you can sketch the [architecture diagram](../ARCHITECTURE.md) from me
 
 ---
 
-Prev: [Ops, Docker & deploy](11-ops-and-deploy.md) · Back to [the index](README.md).
+Prev: [Ops, Docker & deploy](11-ops-and-deploy.md) · Next: [The RAG glossary →](13-rag-glossary.md)
