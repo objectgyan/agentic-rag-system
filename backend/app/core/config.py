@@ -12,7 +12,7 @@ MIN_JWT_SECRET_LEN = 32
 class TierLimits:
     TIERS = {
         "free": {
-            "requests_per_minute": 100,
+            "requests_per_minute": 10,
             "documents_per_month": 50,
             "storage_gb": 1,
             "max_collections": 5,

@@ -75,3 +75,23 @@ async def test_hit_fails_open_when_redis_down(monkeypatch):
     mw = RateLimitMiddleware(app=None)
     allowed, current = await mw._hit("k", 5)
     assert allowed is True and current == 0
+
+
+def test_tier_limits_form_a_sane_ladder():
+    """Quotas must not shrink as you pay more.
+
+    Regression: free `requests_per_minute` was 100 while pro was 60 — a paying customer got *fewer*
+    requests than a free one. This asserts the whole ladder is monotonic (free ≤ pro ≤ enterprise).
+    """
+    from app.core.config import TierLimits
+
+    def cap(v):
+        return float("inf") if v == -1 else v  # -1 means "unlimited"
+
+    free = TierLimits.TIERS["free"]
+    pro = TierLimits.TIERS["pro"]
+    ent = TierLimits.TIERS["enterprise"]
+
+    assert free["requests_per_minute"] <= pro["requests_per_minute"] <= ent["requests_per_minute"]
+    for key in ("documents_per_month", "storage_gb", "max_collections", "concurrent_queries"):
+        assert cap(free[key]) <= cap(pro[key]) <= cap(ent[key]), f"{key} not monotonic across tiers"

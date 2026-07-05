@@ -250,7 +250,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 ```yaml
 tiers:
   free:
-    requests_per_minute: 100   # NB: TierLimits in config.py is the source of truth
+    requests_per_minute: 10    # TierLimits in config.py is the source of truth
     documents_per_month: 50
     storage_gb: 1
     max_collections: 5
