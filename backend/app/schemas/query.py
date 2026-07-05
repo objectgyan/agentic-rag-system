@@ -25,6 +25,8 @@ class QueryRequest(BaseModel):
     max_hops: int = Field(default=2, ge=1, le=4)
     # Augment generation with knowledge-graph facts about entities in the query (A3).
     use_graph: bool = False
+    # Classify intent and route (item 4): chit-chat skips retrieval. Off by default.
+    use_routing: bool = False
     filters: Optional[dict] = None
     include_citations: bool = True
     # Opt-in: run the RAG evaluator over the answer (extra LLM calls) and return scores (C3).
@@ -62,6 +64,8 @@ class QueryResponse(BaseModel):
     graph_facts: List[str] = []
     # Per-query execution trace when trace=true was requested (item 3); None otherwise.
     trace: Optional[dict] = None
+    # Classified query intent when use_routing=true (item 4); None otherwise.
+    intent: Optional[str] = None
 
 
 class ConversationCreate(BaseModel):

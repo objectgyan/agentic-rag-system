@@ -51,6 +51,7 @@ class RAGPipeline:
         max_hops: int = 2,
         use_graph: bool = False,
         trace: bool = False,
+        use_routing: bool = False,
     ) -> Dict[str, Any]:
         """Execute a full RAG query."""
         from app.services.rag.tracing import QueryTrace
@@ -65,6 +66,23 @@ class RAGPipeline:
         all_chunks: List[RetrievedChunk] = []
         degraded: List[str] = []
         hops: List[str] = []
+
+        # Intent routing (item 4): classify the query and skip retrieval for chit-chat, so
+        # smalltalk doesn't hit the retriever. Fail-soft — on error we treat it as a question.
+        intent: Optional[str] = None
+        skip_retrieval = False
+        if use_routing:
+            try:
+                from app.services.rag.intent import IntentClassifier
+
+                with qt.span("route"):
+                    intent = (await IntentClassifier().classify(query)).intent
+            except Exception:
+                logger.warning("intent routing failed; treating as a question", exc_info=True)
+                degraded.append("routing")
+            if intent == "chitchat":
+                skip_retrieval = True
+                use_hyde = use_multi_query = use_multi_hop = False
 
         if use_hyde:
             try:
@@ -104,7 +122,7 @@ class RAGPipeline:
             )
             if use_reranking and all_chunks:
                 all_chunks = await self.retriever._rerank(query, all_chunks, top_k)
-        else:
+        elif not skip_retrieval:
             all_chunks = await self.retriever.retrieve(
                 search_query, collection_ids=collection_ids, top_k=top_k, use_reranking=use_reranking
             )
@@ -191,6 +209,7 @@ class RAGPipeline:
         result["degraded"] = degraded
         result["hops"] = hops
         result["graph_facts"] = graph_facts
+        result["intent"] = intent
 
         # Optional RAG self-evaluation (C3) — opt-in because it costs extra LLM calls.
         result["evaluation"] = None
