@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from app.services.rag.tracing import QueryTrace, Span, estimate_cost
+from app.services.rag.tracing import QueryTrace, estimate_cost
 
 
 def test_estimate_cost_known_model():

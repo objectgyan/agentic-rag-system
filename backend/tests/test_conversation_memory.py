@@ -11,7 +11,6 @@ from app.services.rag import pipeline as pipeline_mod
 from app.services.rag.conversation_memory import ConversationMemory, count_tokens
 from app.services.rag.pipeline import RAGPipeline
 
-
 # --------------------------------------------------------------------------- #
 # Pipeline forwarding (C1) — still holds with the item-2 bounding step in front
 # --------------------------------------------------------------------------- #
