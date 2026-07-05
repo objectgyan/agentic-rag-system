@@ -14,7 +14,8 @@ class _FakeGenerator:
     def __init__(self, *args, **kwargs):
         pass
 
-    async def generate(self, query, chunks, conversation_history=None, graph_facts=None):
+    async def generate(self, query, chunks, conversation_history=None, graph_facts=None,
+                       conversation_summary=None):
         return {"answer": "fallback answer", "model_used": "test", "tokens_used": 1}
 
 

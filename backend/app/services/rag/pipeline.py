@@ -129,10 +129,29 @@ class RAGPipeline:
 
         retrieval_time = (time.time() - retrieval_start) * 1000
 
+        # Bound the conversation history (competitive-phase item 2): summarize older turns and
+        # keep a token-budgeted recent window, so long chats don't blow the context window.
+        # Fail-soft — on error we fall back to the raw history and record it as degraded.
+        conversation_summary: Optional[str] = None
+        if conversation_history:
+            try:
+                from app.services.rag.conversation_memory import ConversationMemory
+
+                conversation_summary, conversation_history = await ConversationMemory(
+                    model=model
+                ).prepare(conversation_history)
+            except Exception:
+                logger.warning("conversation memory prep failed; using raw history", exc_info=True)
+                degraded.append("conversation_memory")
+
         # Generate answer, conditioning on prior conversation turns (C1) and graph facts (A3).
         generator = GenerationService(model=model, temperature=temperature)
         result = await generator.generate(
-            query, all_chunks, conversation_history=conversation_history, graph_facts=graph_facts
+            query,
+            all_chunks,
+            conversation_history=conversation_history,
+            graph_facts=graph_facts,
+            conversation_summary=conversation_summary,
         )
 
         # Build citations - only for sources actually cited in the answer
@@ -197,13 +216,28 @@ class RAGPipeline:
             query, collection_ids=collection_ids, top_k=top_k, use_reranking=use_reranking
         )
 
+        # Bound the conversation history (competitive-phase item 2), fail-soft.
+        conversation_summary: Optional[str] = None
+        if conversation_history:
+            try:
+                from app.services.rag.conversation_memory import ConversationMemory
+
+                conversation_summary, conversation_history = await ConversationMemory(
+                    model=model
+                ).prepare(conversation_history)
+            except Exception:
+                logger.warning("conversation memory prep failed; using raw history", exc_info=True)
+
         generator = GenerationService(model=model, temperature=temperature)
 
         # Accumulate the full answer to determine which sources were actually cited
         full_answer = ""
 
         async for token in generator.generate_stream(
-            query, chunks, conversation_history=conversation_history
+            query,
+            chunks,
+            conversation_history=conversation_history,
+            conversation_summary=conversation_summary,
         ):
             # Skip the initial citations - we'll send filtered ones at the end
             if token.get("type") == "citations":

@@ -110,6 +110,15 @@ class Settings(BaseSettings):
     # Cheap, fast model for contextual compression — a simple extraction task (A2).
     default_compression_model: str = "gpt-4o-mini"
 
+    # Conversation memory (competitive-phase item 2): bound the chat history sent to the
+    # generator so long sessions can't blow the context window or inflate cost. The most
+    # recent `conversation_recent_messages` messages are kept verbatim (trimmed to
+    # `conversation_token_budget` tokens); older turns are distilled into a running summary
+    # (via default_compression_model) when `conversation_summary_enabled`.
+    conversation_recent_messages: int = 6
+    conversation_token_budget: int = 1500
+    conversation_summary_enabled: bool = True
+
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"

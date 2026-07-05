@@ -40,16 +40,27 @@ class GenerationService:
         chunks: List[RetrievedChunk],
         conversation_history: Optional[List[dict]] = None,
         graph_facts: Optional[List[str]] = None,
+        conversation_summary: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Generate an answer from context."""
         context = self._build_context(chunks)
         if graph_facts:
             kg = "\n".join(f"- {f}" for f in graph_facts)
             context = f"[Knowledge Graph Facts]\n{kg}\n\n---\n\n{context}"
-        messages = [{"role": "system", "content": self._build_system_prompt()}]
+
+        system = self._build_system_prompt()
+        # A running summary of older conversation turns (C-phase item 2), when provided.
+        if conversation_summary:
+            system += (
+                "\n\nSummary of earlier conversation (for context; the most recent turns follow "
+                f"verbatim):\n{conversation_summary}"
+            )
+        messages = [{"role": "system", "content": system}]
 
         if conversation_history:
-            messages.extend(conversation_history[-10:])  # Last 10 messages for context window
+            # Bounded by ConversationMemory upstream; the slice is a safety cap for callers
+            # that pass raw history.
+            messages.extend(conversation_history[-settings.conversation_recent_messages:])
 
         messages.append({
             "role": "user",
@@ -66,13 +77,21 @@ class GenerationService:
         query: str,
         chunks: List[RetrievedChunk],
         conversation_history: Optional[List[dict]] = None,
+        conversation_summary: Optional[str] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Stream-generate an answer."""
         context = self._build_context(chunks)
-        messages = [{"role": "system", "content": self._build_system_prompt()}]
+
+        system = self._build_system_prompt()
+        if conversation_summary:
+            system += (
+                "\n\nSummary of earlier conversation (for context; the most recent turns follow "
+                f"verbatim):\n{conversation_summary}"
+            )
+        messages = [{"role": "system", "content": system}]
 
         if conversation_history:
-            messages.extend(conversation_history[-10:])
+            messages.extend(conversation_history[-settings.conversation_recent_messages:])
 
         messages.append({
             "role": "user",

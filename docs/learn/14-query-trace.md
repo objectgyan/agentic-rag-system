@@ -57,8 +57,9 @@ will poke hardest — be able to explain it cold.*
 ## 3. Conversation history (memory)
 
 If the request carries a `conversation_id`, `_load_conversation_history` authorizes it (tenant + user)
-and loads prior turns chronologically, to pass to the generator as context. (Today it loads *all*
-turns — the [roadmap](../COMPETITIVE_ROADMAP.md) item ② adds a token budget + summary.)
+and loads prior turns chronologically. Before generation, `ConversationMemory` (`conversation_memory.py`)
+**bounds** that history: it keeps the most recent messages verbatim within a token budget and distils
+older turns into a running summary — so a long chat can't blow the context window (roadmap item ②).
 
 **Vocabulary:** *conversation memory, context window.*
 
