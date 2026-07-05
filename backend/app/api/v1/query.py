@@ -122,6 +122,7 @@ async def query(
             use_graph=req.use_graph,
             trace=req.trace,
             use_routing=req.use_routing,
+            boosts=req.boosts,
         )
     except Exception:
         rag_queries_total.labels(status="error").inc()

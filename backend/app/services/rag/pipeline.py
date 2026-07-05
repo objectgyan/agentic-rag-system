@@ -52,6 +52,7 @@ class RAGPipeline:
         use_graph: bool = False,
         trace: bool = False,
         use_routing: bool = False,
+        boosts: Optional[List[dict]] = None,
     ) -> Dict[str, Any]:
         """Execute a full RAG query."""
         from app.services.rag.tracing import QueryTrace
@@ -126,6 +127,18 @@ class RAGPipeline:
             all_chunks = await self.retriever.retrieve(
                 search_query, collection_ids=collection_ids, top_k=top_k, use_reranking=use_reranking
             )
+
+        # Business re-ranking (item 4): blend relevance with weighted metadata signals
+        # (manufacturer preference, popularity, ...). Optional and fail-soft.
+        if boosts and all_chunks:
+            try:
+                from app.services.rag.ranking import MetadataBoostReranker
+
+                with qt.span("business_rerank"):
+                    all_chunks = await MetadataBoostReranker(boosts).rerank(query, all_chunks, top_k)
+            except Exception:
+                logger.warning("business re-ranking failed; using retrieval order", exc_info=True)
+                degraded.append("business_rerank")
 
         # Contextual compression (A2): distill chunks to query-relevant content before
         # generation. Optional and fail-soft — on error we keep the raw chunks.

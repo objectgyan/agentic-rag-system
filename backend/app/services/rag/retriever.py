@@ -101,6 +101,7 @@ class HybridRetriever:
 
         sql = f"""
             SELECT c.id, c.document_id, c.content, c.page_number, c.section_title,
+                   c.metadata_extra,
                    1 - (c.embedding <=> (:embedding)::vector) as score
             FROM chunks c
             WHERE {where_clause}
@@ -116,9 +117,10 @@ class HybridRetriever:
                 chunk_id=str(row[0]),
                 document_id=str(row[1]),
                 content=row[2],
-                score=float(row[5]) if row[5] else 0.0,
+                score=float(row[6]) if row[6] else 0.0,
                 page_number=row[3],
                 section_title=row[4],
+                metadata=row[5],
             )
             for row in rows
         ]
@@ -154,6 +156,7 @@ class HybridRetriever:
                 score=float(scores[i]),
                 page_number=chunks[i].page_number,
                 section_title=chunks[i].section_title,
+                metadata=chunks[i].metadata_extra,
             )
             for i in top_indices
             if scores[i] > 0

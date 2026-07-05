@@ -27,6 +27,10 @@ class QueryRequest(BaseModel):
     use_graph: bool = False
     # Classify intent and route (item 4): chit-chat skips retrieval. Off by default.
     use_routing: bool = False
+    # Business re-ranking rules (item 4): blend relevance with metadata signals, e.g.
+    # [{"field": "manufacturer", "equals": "Sony", "weight": 0.3},
+    #  {"field": "popularity", "numeric": true, "weight": 0.2}]. None = pure relevance order.
+    boosts: Optional[List[dict]] = None
     filters: Optional[dict] = None
     include_citations: bool = True
     # Opt-in: run the RAG evaluator over the answer (extra LLM calls) and return scores (C3).

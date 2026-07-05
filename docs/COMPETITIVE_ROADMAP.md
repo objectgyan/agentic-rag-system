@@ -120,9 +120,12 @@ the FDE job. This is where the [`RERANKING.md`](RERANKING.md) work lands.
   popularity; soft boosts over hard filters; config-driven weights.
 
 **Acceptance criteria:**
-- [ ] Router picks intent and measurably changes the path (eval'd with harness ①).
-- [ ] A pluggable re-ranker interface so a customer-specific ranker drops in.
-- [ ] Business signals blended with normalized weights; a test shows a manufacturer boost reorders.
+- [x] Router picks intent and changes the path — `intent.py` (embedding argmax); `use_routing` makes chit-chat skip retrieval. Verified with real embeddings.
+- [x] A pluggable re-ranker interface (`ranking.py` `Reranker` protocol) so a customer-specific ranker drops in.
+- [x] Business signals blended with normalized weights (`MetadataBoostReranker`); `test_categorical_boost_reorders` shows a manufacturer boost reordering past a more-relevant chunk. `boosts` exposed on the query API; retriever now populates chunk metadata.
+- [ ] *(stretch)* Learning-to-rank model behind the same interface once click data exists.
+
+**Status: ④ core complete** (15 tests across intent + ranking; full suite 144 pass; verified end-to-end).
 
 **Vocabulary:** *query intent / routing, zero-shot classification, metadata filtering,
 learning-to-rank (LambdaMART), signal fusion, boosting vs filtering, personalization.*
@@ -168,6 +171,11 @@ That trio — measurable, customizable, debuggable — *is* the FDE value propos
   (`metrics`, `dataset`, `runner`, CLI) + `tests/test_eval_metrics.py`. Unit tests green in-container
   (14 passed). **Ran end-to-end** against a seeded tenant (single-doc, so retrieval trivially 1.0;
   generation faithfulness/completeness 1.0, answers correctly cited).
+- **2026-07-05** — **Item ④ done** — customization layer. ④a intent routing (`intent.py`,
+  embedding-argmax zero-shot; `use_routing` skips retrieval for chit-chat). ④b pluggable business
+  re-ranking (`ranking.py` `Reranker` + `MetadataBoostReranker`: normalized relevance + weighted
+  metadata boosts); retriever now populates chunk metadata; `boosts` on the query API. 15 tests,
+  full suite 144 pass, verified end-to-end.
 - **2026-07-05** — **Item ③ done** — per-query tracing (`tracing.py`): `QueryTrace` with
   `retrieve`/`generate` spans, chunk ids+scores, token split, and `estimate_cost` (persisted to
   `UsageRecord.cost_usd`); `trace=true` on the query API attaches it, a summary logs every query.
