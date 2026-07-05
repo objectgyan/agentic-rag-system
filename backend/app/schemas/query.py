@@ -29,6 +29,9 @@ class QueryRequest(BaseModel):
     include_citations: bool = True
     # Opt-in: run the RAG evaluator over the answer (extra LLM calls) and return scores (C3).
     evaluate: bool = False
+    # Opt-in: attach a per-query execution trace (stage latencies, retrieved chunks + scores,
+    # tokens, cost) to the response for debugging (item 3). A structured summary is always logged.
+    trace: bool = False
     temperature: float = Field(default=0.1, ge=0, le=2)
 
 
@@ -57,6 +60,8 @@ class QueryResponse(BaseModel):
     hops: List[str] = []
     # Knowledge-graph facts used to augment the answer (A3); empty if not used.
     graph_facts: List[str] = []
+    # Per-query execution trace when trace=true was requested (item 3); None otherwise.
+    trace: Optional[dict] = None
 
 
 class ConversationCreate(BaseModel):

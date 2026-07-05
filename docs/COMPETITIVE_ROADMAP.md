@@ -24,7 +24,7 @@ making the product *good* and *yours*.
 | Chat-session correctness | 🟢 Good | Conversations authorized (tenant+user), history persisted, replayed to the generator. |
 | **Evaluation / quality loop** | 🔴 **Gap** | Per-query LLM judge exists, but **no offline eval harness / regression suite**. Flying blind on "did my change help?" |
 | Conversation context mgmt | 🟢 Addressed | Item ② done: recent window + token budget + running summary of older turns (`conversation_memory.py`). Semantic-memory retrieval still a stretch. |
-| **Observability / tracing** | 🟡 **Weak** | Have metrics; no per-query *trace* (chunks, scores, per-stage latency, tokens). Can't debug "why wrong?" |
+| Observability / tracing | 🟢 Addressed | Item ③ done: per-query `QueryTrace` (stage latencies, chunk ids+scores, tokens, cost) on `trace=true` + logged every query; cost persisted to `UsageRecord`. OTel export still a stretch. |
 | **Scale of sparse search** | 🟡 **Weak** | BM25 loads ≤1000 chunks into Python (`retriever.py`). Fine for a demo, a cliff at real corpus size. |
 | **Prompt-injection / output safety** | 🔴 **Gap** | RAG is a huge injection surface; no guardrail/moderation/PII layer. |
 | Caching | 🟡 Missing | No semantic/embedding cache — cost & latency left on the table. |
@@ -97,9 +97,12 @@ scores, latency per stage, tokens/cost. Metrics tell you *that* it's slow; trace
 - A per-query cost estimate (tokens × model price).
 
 **Acceptance criteria:**
-- [ ] Every query emits a trace with per-stage latency and the retrieved chunk ids+scores.
-- [ ] Token + cost recorded per query (extends the existing `UsageRecord`).
-- [ ] Can pull up one request end-to-end and explain its answer.
+- [x] Every query emits a trace with per-stage latency and the retrieved chunk ids+scores (`tracing.py` `QueryTrace`; `trace=true` attaches it, and a summary logs on every query).
+- [x] Token + cost recorded per query — `estimate_cost` + `MODEL_PRICING`; cost persisted to `UsageRecord.cost_usd`.
+- [x] Can pull up one request end-to-end (verified: `retrieve`/`generate` spans, chunk scores, tokens, cost).
+- [ ] *(stretch)* Export to OpenTelemetry / Langfuse / Phoenix.
+
+**Status: ③ core complete** (10 tracing tests; full suite 129 pass; verified end-to-end).
 
 **Vocabulary:** *span/trace, observability vs monitoring, OpenTelemetry, token accounting,
 p50/p95 latency, cost-per-query.*
@@ -165,6 +168,10 @@ That trio — measurable, customizable, debuggable — *is* the FDE value propos
   (`metrics`, `dataset`, `runner`, CLI) + `tests/test_eval_metrics.py`. Unit tests green in-container
   (14 passed). **Ran end-to-end** against a seeded tenant (single-doc, so retrieval trivially 1.0;
   generation faithfulness/completeness 1.0, answers correctly cited).
+- **2026-07-05** — **Item ③ done** — per-query tracing (`tracing.py`): `QueryTrace` with
+  `retrieve`/`generate` spans, chunk ids+scores, token split, and `estimate_cost` (persisted to
+  `UsageRecord.cost_usd`); `trace=true` on the query API attaches it, a summary logs every query.
+  10 tests, full suite 129 pass, verified end-to-end.
 - **2026-07-05** — Wrote the tutorial (docs/learn/13–15). Built a **multi-document** eval fixture and
   ran it: metrics now move (`recall@5`/`mrr` 1.0 but `precision@5` 0.23, and a brittle
   `answer_must_contain` false-negative caught by the LLM judge). **Item ② done** — conversation memory

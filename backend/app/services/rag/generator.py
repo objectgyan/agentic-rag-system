@@ -131,10 +131,13 @@ class GenerationService:
             max_tokens=2000,
         )
 
+        usage = response.usage
         return {
             "answer": response.choices[0].message.content,
             "model_used": self.model,
-            "tokens_used": response.usage.total_tokens if response.usage else None,
+            "tokens_used": usage.total_tokens if usage else None,
+            "prompt_tokens": usage.prompt_tokens if usage else None,
+            "completion_tokens": usage.completion_tokens if usage else None,
         }
 
     async def _generate_anthropic(self, messages: List[dict]) -> Dict[str, Any]:
@@ -155,6 +158,8 @@ class GenerationService:
             "answer": response.content[0].text,
             "model_used": self.model,
             "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
+            "prompt_tokens": response.usage.input_tokens,
+            "completion_tokens": response.usage.output_tokens,
         }
 
     async def _stream_openai(self, messages: List[dict]) -> AsyncIterator[Dict[str, Any]]:

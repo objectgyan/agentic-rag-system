@@ -50,8 +50,12 @@ class RAGPipeline:
         use_multi_hop: bool = False,
         max_hops: int = 2,
         use_graph: bool = False,
+        trace: bool = False,
     ) -> Dict[str, Any]:
         """Execute a full RAG query."""
+        from app.services.rag.tracing import QueryTrace
+
+        qt = QueryTrace()
         retrieval_start = time.time()
 
         # Query enhancement. These are optional accelerators: if the enhancer LLM call
@@ -128,6 +132,9 @@ class RAGPipeline:
                 degraded.append("graph")
 
         retrieval_time = (time.time() - retrieval_start) * 1000
+        # Trace (item 3): record the retrieval stage + the chunks it produced.
+        qt.add_span("retrieve", retrieval_time, n_chunks=len(all_chunks))
+        qt.record_chunks(all_chunks)
 
         # Bound the conversation history (competitive-phase item 2): summarize older turns and
         # keep a token-budgeted recent window, so long chats don't blow the context window.
@@ -146,13 +153,14 @@ class RAGPipeline:
 
         # Generate answer, conditioning on prior conversation turns (C1) and graph facts (A3).
         generator = GenerationService(model=model, temperature=temperature)
-        result = await generator.generate(
-            query,
-            all_chunks,
-            conversation_history=conversation_history,
-            graph_facts=graph_facts,
-            conversation_summary=conversation_summary,
-        )
+        with qt.span("generate"):
+            result = await generator.generate(
+                query,
+                all_chunks,
+                conversation_history=conversation_history,
+                graph_facts=graph_facts,
+                conversation_summary=conversation_summary,
+            )
 
         # Build citations - only for sources actually cited in the answer
         citations = []
@@ -196,8 +204,24 @@ class RAGPipeline:
                 logger.warning("RAG evaluation failed; returning answer without scores", exc_info=True)
                 degraded.append("evaluation")
 
-        # Track usage
-        await self._track_usage(result.get("tokens_used"), model)
+        # Finalize the trace (item 3): usage + cost, emit a structured summary for every query,
+        # and attach the full trace to the response only when explicitly requested.
+        qt.record_usage(
+            result.get("model_used") or model or settings.default_llm_model,
+            prompt_tokens=result.get("prompt_tokens"),
+            completion_tokens=result.get("completion_tokens"),
+            total_tokens=result.get("tokens_used"),
+        )
+        qt.log_summary(logger)
+        result["trace"] = qt.to_dict() if trace else None
+
+        # Track usage (tokens + estimated cost)
+        await self._track_usage(
+            result.get("tokens_used"),
+            model,
+            prompt_tokens=result.get("prompt_tokens"),
+            completion_tokens=result.get("completion_tokens"),
+        )
 
         return result
 
@@ -278,18 +302,32 @@ class RAGPipeline:
                     "citations": enriched_citations,
                 }
 
-    async def _track_usage(self, tokens: Optional[int], model: Optional[str]):
-        """Record usage for billing and limits."""
+    async def _track_usage(
+        self,
+        tokens: Optional[int],
+        model: Optional[str],
+        prompt_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
+    ):
+        """Record usage for billing and limits, including an estimated cost (item 3)."""
         from datetime import datetime, timezone
 
         from app.models.usage import UsageRecord
+        from app.services.rag.tracing import estimate_cost
 
+        model_used = model or settings.default_llm_model
+        cost = (
+            estimate_cost(model_used, prompt_tokens or 0, completion_tokens or 0)
+            if (prompt_tokens or completion_tokens)
+            else None
+        )
         record = UsageRecord(
             tenant_id=self.tenant_id,
             user_id=self.user_id,
             resource_type="query",
             tokens_used=tokens,
-            model_used=model or settings.default_llm_model,
+            cost_usd=cost,
+            model_used=model_used,
             period=datetime.now(timezone.utc).strftime("%Y-%m"),
         )
         self.db.add(record)
