@@ -99,13 +99,16 @@ Nails exact terms embeddings blur: names, IDs, error codes, SKUs. Called "sparse
 representation is a huge mostly-zero vector over the vocabulary. → `HybridRetriever._sparse_search`.
 
 **BM25** — the classic keyword-relevance ranking function (what search engines used pre-embeddings).
-Scores a doc by query-term frequency, dampened by how common each term is. → the `rank-bm25` library;
-note this repo scores BM25 **in Python over ≤1000 candidate chunks** — a known scaling limit (move it
-into Postgres `tsvector` at scale). *Say it like:* "Pure vector search was missing exact part numbers,
-so we added a BM25 pass."
+Scores a doc by query-term frequency, dampened by how common each term is. *Say it like:* "Pure
+vector search was missing exact part numbers, so we added a keyword pass."
 
-**tsvector** — Postgres' built-in full-text search type; where you'd push BM25-style search to scale
-it beyond in-process.
+**Postgres full-text search (`tsvector` / `ts_rank`)** — how this repo does sparse search **in the
+database**: a GIN-indexed `content_tsv` generated column, ranked with `ts_rank` over
+`websearch_to_tsquery` (migration 006). It replaced an earlier in-Python BM25 that loaded ≤1000 rows
+per query — the same keyword idea, but indexed and scalable instead of scored in-process.
+
+**tsvector** — Postgres' built-in full-text search type; this repo's sparse search is a GIN-indexed
+`content_tsv` column (see the entry just above) — how keyword search scales beyond in-process scoring.
 
 ---
 

@@ -90,9 +90,10 @@ LIMIT 15                     -- top_k * 3 candidates
 ```
 This finds chunks about *"Maria Chen led Apollo"* even if the query said "who ran the project."
 
-**5b. Sparse search (BM25).** In parallel, up to 1000 candidate chunks for the tenant are loaded and
-scored by **BM25** (keyword relevance) in-process — this is what would catch an exact token like a
-project code. (Loading 1000 rows into Python is the known scaling limit — roadmap item ⑤.)
+**5b. Sparse search (keyword).** In parallel, Postgres full-text search ranks chunks by keyword
+relevance — `ts_rank` over the GIN-indexed `content_tsv` column (migration 006) — catching exact
+tokens like a project code that embeddings blur. This runs **in the database**; it replaced an
+earlier in-Python BM25 that loaded ≤1000 rows per query (roadmap item ⑤).
 
 **5c. RRF fusion.** The two ranked lists are merged with **Reciprocal Rank Fusion**: each chunk gets
 `Σ weight/(k + rank)`, so anything ranked highly by *either* search rises. No score-scale juggling.

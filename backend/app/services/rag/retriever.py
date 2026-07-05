@@ -4,14 +4,10 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-import numpy as np
-from rank_bm25 import BM25Okapi
-from sqlalchemy import select
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.chunk import Chunk
 from app.services.rag.embedder import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -128,38 +124,44 @@ class HybridRetriever:
     async def _sparse_search(
         self, query: str, collection_ids: Optional[List[str]], top_k: int
     ) -> List[RetrievedChunk]:
-        """BM25 sparse retrieval. Loads candidate chunks and scores locally."""
-        conditions = [Chunk.tenant_id == self.tenant_id]
+        """Sparse keyword retrieval via Postgres full-text search.
+
+        Ranks chunks with ``ts_rank`` over the GIN-indexed ``content_tsv`` column (migration 006),
+        instead of loading up to 1000 rows and scoring BM25 in-process. ``websearch_to_tsquery``
+        parses the user's words into a tsquery (tolerant of stopwords / punctuation); a query that
+        reduces to nothing simply matches nothing and sparse contributes zero to the fusion.
+        """
+        conditions = ["c.tenant_id = :tenant_id", "c.content_tsv @@ q.tsq"]
+        params: dict = {"tenant_id": self.tenant_id, "query": query, "top_k": top_k}
         if collection_ids:
-            conditions.append(Chunk.collection_id.in_(collection_ids))
+            conditions.append("c.collection_id = ANY(:collection_ids)")
+            params["collection_ids"] = collection_ids
 
-        result = await self.db.execute(
-            select(Chunk).where(*conditions).limit(1000)
-        )
-        chunks = result.scalars().all()
+        where_clause = " AND ".join(conditions)
+        sql = f"""
+            WITH q AS (SELECT websearch_to_tsquery('english', :query) AS tsq)
+            SELECT c.id, c.document_id, c.content, c.page_number, c.section_title,
+                   c.metadata_extra, ts_rank(c.content_tsv, q.tsq) AS score
+            FROM chunks c, q
+            WHERE {where_clause}
+            ORDER BY score DESC
+            LIMIT :top_k
+        """
 
-        if not chunks:
-            return []
+        result = await self.db.execute(sa_text(sql), params)
+        rows = result.fetchall()
 
-        # Build BM25 index
-        tokenized = [c.content.lower().split() for c in chunks]
-        bm25 = BM25Okapi(tokenized)
-        scores = bm25.get_scores(query.lower().split())
-
-        # Get top-k
-        top_indices = np.argsort(scores)[::-1][:top_k]
         return [
             RetrievedChunk(
-                chunk_id=str(chunks[i].id),
-                document_id=str(chunks[i].document_id),
-                content=chunks[i].content,
-                score=float(scores[i]),
-                page_number=chunks[i].page_number,
-                section_title=chunks[i].section_title,
-                metadata=chunks[i].metadata_extra,
+                chunk_id=str(row[0]),
+                document_id=str(row[1]),
+                content=row[2],
+                score=float(row[6]) if row[6] else 0.0,
+                page_number=row[3],
+                section_title=row[4],
+                metadata=row[5],
             )
-            for i in top_indices
-            if scores[i] > 0
+            for row in rows
         ]
 
     def _rrf_fusion(
