@@ -26,8 +26,8 @@ flowchart TB
 
         subgraph RAG[RAG pipeline]
             direction LR
-            ENH[Enhance: HyDE, multi-query] --> RET[Hybrid retrieval: dense pgvector + BM25 + RRF]
-            RET --> RR[Re-rank: Cohere or local cross-encoder]
+            ENH[Enhance: HyDE, multi-query] --> RET[Hybrid retrieval: dense pgvector + Postgres FTS + RRF]
+            RET --> RR[Re-rank: cross-encoder + business boosts]
             RR --> MH[Multi-hop loop] --> CMP[Contextual compression] --> KG[Knowledge-graph 1-hop facts] --> GEN[Generate + citations]
         end
 
@@ -95,10 +95,12 @@ user, and runs `SET app.current_tenant` so Postgres Row-Level Security scopes ev
 non-owner, non-superuser role — with `FORCE ROW LEVEL SECURITY` on every tenant table, so
 RLS actually applies. Alembic connects as the owner role for DDL only.
 
-**RAG pipeline.** Hybrid retrieval (dense pgvector + BM25, fused with RRF) → optional
-re-rank (Cohere or a local cross-encoder) → optional multi-hop, contextual compression, and
-knowledge-graph facts → generation with filtered citations. Every advanced step is opt-in
-per request and degrades gracefully.
+**RAG pipeline.** Optional intent routing (chit-chat skips retrieval) → hybrid retrieval (dense
+pgvector + in-DB Postgres full-text search, fused with RRF) → optional cross-encoder re-rank
+(Cohere or local) and business/metadata re-ranking → optional multi-hop, contextual compression,
+and knowledge-graph facts → conversation-memory bounding → generation with filtered citations.
+Every advanced step is opt-in per request and degrades gracefully; a per-query trace (latencies,
+chunk scores, tokens, cost) is available via `trace=true`.
 
 **Agents.** A ReAct orchestrator over a tool registry; agents can `delegate` to a
 depth-bounded sub-agent.

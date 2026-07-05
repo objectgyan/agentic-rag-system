@@ -78,7 +78,8 @@ matches, and you can explain what an embedding is.
 
 Now layer in the production-grade pieces *one at a time*, each as an opt-in flag, each with a
 graceful fallback:
-- **Hybrid search** — add BM25 and fuse with RRF.
+- **Hybrid search** — add a keyword pass (start with BM25/`rank-bm25` for simplicity; this repo now
+  does it in-DB with Postgres full-text search) and fuse with RRF.
 - **Re-ranking** — a cross-encoder over the top candidates.
 - **Citations** — return only the sources the answer actually cited.
 - **Streaming** — yield tokens over SSE.

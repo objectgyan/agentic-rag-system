@@ -101,9 +101,11 @@ Pure vector search is great at meaning but can miss exact terms (names, error co
 keyword search nails exact terms but misses paraphrases. So we do **both** and fuse them:
 
 1. **Dense search** — pgvector cosine nearest-neighbors (meaning).
-2. **Sparse search — BM25** — a classic keyword-relevance algorithm (the thing search engines
-   used before embeddings). Computed in-process over the tenant's candidate chunks with the
-   `rank-bm25` library.
+2. **Sparse search — Postgres full-text search** — keyword relevance (the same idea as BM25, the
+   algorithm search engines used before embeddings). Ranked with `ts_rank` over a GIN-indexed
+   `content_tsv` column *in the database* (migration 006). An earlier version scored BM25 in Python
+   over ≤1000 loaded rows — moving it in-DB removed that scaling limit (see the [competitive
+   roadmap](../COMPETITIVE_ROADMAP.md) item ⑤).
 3. **Reciprocal Rank Fusion (RRF)** — combine the two ranked lists. Each item gets a score of
    `Σ weight / (k + rank)` across the lists; items ranked highly by *either* method bubble up.
    It's a simple, robust way to merge rankings without tuning score scales.
@@ -111,7 +113,7 @@ keyword search nails exact terms but misses paraphrases. So we do **both** and f
 ```mermaid
 flowchart LR
     QV[Question] --> D[Dense: pgvector cosine]
-    QV --> S[Sparse: BM25 keywords]
+    QV --> S[Sparse: Postgres FTS ts_rank]
     D --> F[RRF fusion]
     S --> F
     F --> TOPK[fused top-k chunks]
@@ -178,6 +180,26 @@ slow/flaky provider fails fast instead of hanging a request.
 
 With `evaluate=true`, after generating, a separate LLM scores the answer for *faithfulness*
 (is it grounded in the context?), *relevance*, and *precision* — useful for measuring quality.
+
+### Newer layers — routing, business re-ranking, memory, tracing
+
+Four more opt-in capabilities wrap the flow above (each has a deep-dive page):
+
+- **Intent routing** (`use_routing`, `intent.py`) — classify the query first and *skip retrieval*
+  for chit-chat, so "hello" doesn't hit the retriever. It's a zero-shot classifier: embed the query
+  and each intent's anchor text, take the nearest (argmax). See the
+  [glossary §6](13-rag-glossary.md#6-query-understanding).
+- **Business / metadata re-ranking** (`boosts`, `ranking.py`) — after semantic re-ranking, blend
+  relevance with weighted *business* signals from chunk metadata (manufacturer, popularity, …):
+  `final = base·norm(relevance) + Σ boosts`. This is the "of the relevant ones, which do we
+  surface?" layer — the whole of [`../RERANKING.md`](../RERANKING.md).
+- **Conversation-memory bounding** (`conversation_memory.py`) — before generation, a long chat
+  history is trimmed to a recent, token-budgeted window plus a running summary of older turns, so it
+  can't blow the context window.
+- **Per-query tracing** (`trace=true`, `tracing.py`) — every query records stage latencies, the
+  retrieved chunks + scores, tokens, and estimated cost; a structured summary is logged. This is how
+  you debug "why did it answer that?". See [the query trace](14-query-trace.md) and
+  [evaluation](15-evaluation.md).
 
 ## Why so many optional steps?
 

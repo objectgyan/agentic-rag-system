@@ -41,8 +41,10 @@ The real keystone issue the audit *missed*:
   policy in the migration is dead weight right now — isolation depends *entirely* on the app remembering
   to add `tenant_id = ...` to every query. That is the bug class this whole phase exists to close.
 
-What's genuinely solid (do **not** rewrite): hybrid retrieval (dense + BM25 + RRF), HyDE/multi-query,
-the five chunking strategies, and citation filtering. These are real and well-built.
+What's genuinely solid (do **not** rewrite): hybrid retrieval (dense + sparse keyword + RRF),
+HyDE/multi-query, the five chunking strategies, and citation filtering. These are real and
+well-built. *(Later note: the sparse side was upgraded from in-Python BM25 to in-DB Postgres
+full-text search — see the competitive roadmap item ⑤.)*
 
 ---
 

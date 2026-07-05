@@ -18,7 +18,7 @@ flowchart TB
     PIPE --> ENH{"Query enhancement?<br/>HyDE / multi-query"}
     ENH --> RET["HybridRetriever.retrieve()"]
     RET --> DENSE["Dense: embed query →<br/>pgvector cosine top-15"]
-    RET --> SPARSE["Sparse: BM25 over<br/>candidate chunks"]
+    RET --> SPARSE["Sparse: Postgres FTS<br/>(ts_rank)"]
     DENSE --> RRF["RRF fusion"]
     SPARSE --> RRF
     RRF --> RR["Rerank (cross-encoder)<br/>→ top-5"]
@@ -147,7 +147,7 @@ answer, the filtered citations, `retrieval_time_ms`, and the `degraded` list. Do
 
 > "A query comes in, we decode the JWT and set the Postgres RLS tenant context so everything's
 > isolated. The pipeline optionally rewrites the query with HyDE, then does **hybrid retrieval** —
-> dense pgvector search for meaning plus BM25 for keywords, fused with RRF. A **cross-encoder
+> dense pgvector search for meaning plus Postgres full-text search for keywords, fused with RRF. A **cross-encoder
 > reranker** sharpens the top results, the LLM writes a grounded answer citing `[Source N]`, and we
 > return only the sources it actually cited. Every hop degrades gracefully and we meter usage per
 > tenant."

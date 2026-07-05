@@ -24,7 +24,7 @@ making the product *good* and *yours*.
 | Dimension | State | Notes |
 |---|---|---|
 | Multi-tenancy & isolation | 🟢 Strong | Postgres RLS via `set_tenant_context` — enforced at the DB, not faked in `WHERE`. Rare and real. |
-| Retrieval | 🟢 Strong | Dense + BM25 + RRF + cross-encoder rerank. Ahead of many "dense-only" commercial products. |
+| Retrieval | 🟢 Strong | Dense (pgvector) + sparse (in-DB Postgres FTS) + RRF + cross-encoder rerank. Ahead of many "dense-only" commercial products. |
 | Advanced RAG | 🟢 Strong | HyDE, multi-query, decomposition, multi-hop, compression, knowledge-graph, self-eval. |
 | Auth / SaaS scaffolding | 🟢 Strong | JWT+refresh, API keys, RBAC, per-tier rate limits, usage records, audit log. |
 | Chat-session correctness | 🟢 Good | Conversations authorized (tenant+user), history persisted, replayed to the generator. |

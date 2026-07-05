@@ -194,8 +194,8 @@ re-rank, driven by an agent that sets the context. Reuse this repo's patterns; d
 ### Stage 1 — Retrieve (recall)
 
 - [ ] Dense search over product embeddings (pgvector cosine) — copy `_dense_search`.
-- [ ] Sparse BM25 over `title + description` — copy `_sparse_search` (nails exact model names /
-      SKUs that embeddings blur).
+- [ ] Sparse keyword search over `title + description` — copy `_sparse_search` (Postgres full-text
+      search / `ts_rank`; nails exact model names / SKUs that embeddings blur).
 - [ ] Fuse with RRF — copy `_rrf_fusion`. Output: ~100 candidates each with a `relevance` score.
 
 ### Stage 2a — Semantic re-rank (relevance)

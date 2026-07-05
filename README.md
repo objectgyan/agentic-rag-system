@@ -42,13 +42,18 @@
 - 🌐 **Web**: Single-URL ingestion _(sitemap & recursive crawling: roadmap)_
 
 ### Advanced RAG Pipeline
-- **Hybrid Search**: Dense (embeddings) + Sparse (BM25) + Keyword fusion
-- **Re-ranking**: Cross-encoder re-ranking (Cohere) _(local cross-encoder models: roadmap)_
+- **Hybrid Search**: Dense (pgvector embeddings) + Sparse (in-DB Postgres full-text search) fused with RRF
+- **Re-ranking**: Cross-encoder re-ranking — Cohere or a local `sentence-transformers` model
 - **Query Enhancement**: Multi-query expansion, HyDE (Hypothetical Document Embeddings)
 - **Chunking**: Fixed, semantic, recursive, document-structure-aware, parent-child
 - **Contextual Compression**: LLM-based context distillation
 - **Recursive Retrieval**: Multi-hop reasoning with iterative refinement
 - **Knowledge Graphs**: Entity extraction, relationship mapping, graph-enhanced retrieval
+- **Intent Routing**: Zero-shot query classification; chit-chat skips retrieval
+- **Business Re-ranking**: Pluggable metadata-signal re-ranker (blend relevance with manufacturer/popularity/… boosts)
+- **Conversation Memory**: Recent-window + token budget + running summary of older turns
+- **Observability**: Per-query trace (stage latencies, chunk scores, tokens, cost) + embedding cache
+- **Evaluation Harness**: Golden-set retrieval metrics (recall@k/MRR/nDCG) + LLM-as-judge faithfulness
 - **Citations**: Source attribution with exact passage highlighting
 
 ### Agentic AI
@@ -109,8 +114,8 @@ flowchart TB
 
         subgraph RAG[RAG pipeline]
             direction LR
-            ENH[Enhance: HyDE, multi-query] --> RET[Hybrid retrieval: dense pgvector + BM25 + RRF]
-            RET --> RR[Re-rank: Cohere or local] --> MH[Multi-hop] --> CMP[Compression] --> KG[Knowledge graph] --> GEN[Generate + citations]
+            ENH[Enhance: HyDE, multi-query] --> RET[Hybrid retrieval: dense pgvector + Postgres FTS + RRF]
+            RET --> RR[Re-rank: cross-encoder + business boosts] --> MH[Multi-hop] --> CMP[Compression] --> KG[Knowledge graph] --> GEN[Generate + citations]
         end
         AGENTS[Agent orchestrator: ReAct + delegation]
         ROUTES --> RAG
@@ -393,7 +398,7 @@ Collections can be set to `private` (owner-only), `shared` (org-wide), or `publi
 Upload → Extract → Chunk → Embed → Index → Store
   │         │         │        │       │       │
   │    PDF/DOCX/   Semantic   OpenAI  pgvector MinIO
-  │    OCR/ASR    Recursive   Cohere  BM25
+  │    OCR/ASR    Recursive   Cohere  +tsvector FTS
   │    Vision     Parent-Child HuggingFace
   └─ Celery async worker pool
 ```
