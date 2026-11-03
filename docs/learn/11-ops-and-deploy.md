@@ -75,12 +75,36 @@ were treated as bugs.
 
 ## CI — GitHub Actions
 
-`.github/workflows/ci.yml` runs on every push/PR, with three jobs:
+`.github/workflows/ci.yml` runs on every push/PR, with five jobs:
 - **Lint** — `ruff` (a fast Python linter/formatter; think StyleCop + analyzers).
-- **Frontend** — `npm install` + `npm run build` (TypeScript typecheck + bundle).
-- **Tests** — spins up real Postgres + Redis service containers, runs the **migrations** (which
-  creates the `agentrag_app` role + RLS), then `pytest`. So CI exercises the real DB and the
-  RLS isolation tests in a clean environment, not just mocked unit tests.
+- **Frontend** — `npm ci` (installs exactly what `package-lock.json` pins), `npm audit` of the
+  shipped dependencies, then `npm run build` (typecheck of the app *and* `vite.config.ts` + bundle).
+- **Tests** — spins up real Postgres + Redis service containers, audits every installed Python
+  package with `pip-audit`, runs the **migrations** (which creates the `agentrag_app` role +
+  RLS), then `pytest`. So CI exercises the real DB and the RLS isolation tests in a clean
+  environment, not just mocked unit tests.
+- **Helm** — `helm lint --strict` and renders the chart with the default and Claude-only values.
+- **End-to-end** — builds the real images and boots the whole `docker-compose.yml` stack, then
+  `e2e/run_e2e.py` drives it **through the frontend's nginx**, like a browser: register two
+  tenants → upload → the Celery worker extracts, chunks and embeds (local BGE model) → query →
+  stream → the second tenant can neither query the first tenant's collection nor see its data.
+  Generation goes to `e2e/stub_llm.py`, a small OpenAI-compatible server registered through
+  `LLM_ENDPOINTS` like any client endpoint, so the job needs no API key and costs nothing. The
+  stub repeats the test document's secret fact only if it appears in the prompt — proof that
+  retrieval found the chunk and the generator passed it on.
+
+Tracing every hop the e2e job crosses surfaced three bugs no unit test could: SSE answers were buffered by nginx
+and arrived in one lump (fixed with `X-Accel-Buffering: no`, `app/api/sse.py`), the WebSocket
+route wasn't proxied with the upgrade handshake (`nginx.conf`), and the MinIO healthcheck called
+`curl`, which the image no longer ships (now `mc ready local`).
+
+**Supply chain.** Both audits fail the build on a known-vulnerable dependency, and
+`.github/dependabot.yml` opens weekly grouped update PRs (pip, npm, Actions, base images) that
+this same CI vets. The document parsers (pypdf, Pillow, python-docx, openpyxl) matter most —
+they parse files attackers choose — and `tests/test_extractors.py` builds real PDF/DOCX/XLSX/
+image files in memory so bumping them is safe. Backend images install **CPU** PyTorch first
+(`TORCH_INDEX_URL` build arg); PyPI's default Linux wheel is the CUDA build, several GB of NVIDIA
+libraries a CPU server never uses.
 
 Tests use **pytest** (the standard Python test framework — like xUnit). Many are pure unit tests
 with fakes/mocks; a few are integration tests that talk to the live DB and `skip` themselves when
@@ -93,8 +117,25 @@ no DB is reachable.
 - **Kubernetes (Helm)** — `deploy/helm/agentrag` is a minimal chart: Deployments for backend /
   worker / beat / frontend, a Services pair, an env **Secret**, and a **pre-upgrade migration
   Job** (so migrations run once per release, not once per replica — a classic footgun). Postgres
-  / Redis / MinIO are expected to be managed services wired via `values.yaml`. It passes
-  `helm lint` and renders cleanly.
+  / Redis / MinIO are expected to be managed services wired via `values.yaml`.
+  - `models.*` picks the LLM / fast / embedding / reranker models and `LLM_ENDPOINTS`; `extraEnv`
+    passes any other setting. Empty values keep the app defaults (OpenAI).
+  - `modelCache` mounts `HF_HOME=/models` for local models: an `emptyDir` per pod by default,
+    or one shared PVC (`persistence.enabled`; ReadWriteMany when pods span nodes).
+  - The Secret is itself a pre-install hook (weight -10): hooks run *before* regular resources,
+    so a migration Job reading a normal Secret hangs on the very first install. It is named
+    `<release>-agentrag-config` (0.1.0's `-env` would be deleted by the upgrade that replaces
+    it), and `helm uninstall` leaves it behind.
+  - `podSecurityContext.fsGroup: 10001` makes the model-cache PVC writable by the non-root user.
+
+## Checking a client's model setup
+
+`python -m app.cli.smoke` (in Docker: `docker compose exec backend python -m app.cli.smoke`)
+calls the configured models for real — complete, stream, the RAG pipeline over two in-memory
+passages, and the tool-calling agent loop — and checks the embedding model's output size. Run it
+after setting up or changing a client's keys, models or `LLM_ENDPOINTS`; it prints PASS/FAIL per
+check and the estimated cost (about one to two cents on Claude). `--model` checks other models,
+`--no-agent` skips the agent check.
 
 ## The "why it looks like this" meta-point
 

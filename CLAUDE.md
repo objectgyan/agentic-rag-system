@@ -32,9 +32,16 @@ docker exec -it agentic-rag-system-backend-1 alembic upgrade head
 docker exec -it agentic-rag-system-backend-1 alembic revision --autogenerate -m "msg"
 
 # Frontend
+cd frontend && npm ci           # install exactly what package-lock.json pins (Node >= 22.12)
 cd frontend && npm run dev      # vite dev server
-cd frontend && npm run build    # tsc typecheck + vite build
-cd frontend && npm test         # vitest
+cd frontend && npm run build    # tsc typecheck (app + vite.config.ts) + vite build
+
+# Live check of the configured models (real API calls, prints cost)
+cd backend && python -m app.cli.smoke [--model X] [--no-agent]
+
+# Full-stack end-to-end test (CI job `e2e`; no API key needed - uses e2e/stub_llm.py)
+cp e2e/e2e.env .env && docker compose -f docker-compose.yml -f e2e/compose.e2e.yml up -d --build
+python e2e/run_e2e.py --base http://localhost:3001
 ```
 
 ## Architecture
@@ -54,7 +61,7 @@ Middleware sets state but does NOT authenticate; the dependency is the enforceme
 `AgentOrchestrator` (`orchestrator.py`) runs a **native tool-calling loop** (`run()` yields events; `execute()` / `execute_stream()` are views over it) over a `ToolRegistry` (`tools.py`), whose `TOOLS` carry JSON Schemas. Agent types (`research`/`analyst`/`summarizer`/`code`) are different system prompts. Tools run sequentially (they share the request's `AsyncSession`). Tool args are model-generated and therefore attacker-influenced (prompt injection): never `eval` them (the calculator uses `safe_math.py`), and take scope such as `collection_ids` from the authorized request (`ToolRegistry.collection_ids`), never from tool arguments.
 
 ### LLM provider layer (`app/llm/`)
-All chat-model calls go through the `LLMProvider` port: `get_llm(model)` / `get_fast_llm()` from `app.llm`. **Never import the `openai`/`anthropic` SDKs for chat calls elsewhere.** Model strings are bare (`claude-*` → Anthropic, else OpenAI) or provider-qualified (`anthropic:claude-opus-5-5`, `ollama:llama3.1:8b` for endpoints declared in `LLM_ENDPOINTS`). Adapters: `anthropic_provider.py` (no sampling params — the Claude API rejects them; system prompt cached; server-side refusal fallback; thinking blocks replayed unchanged via `LLMResponse.native`), `openai_provider.py` (also every OpenAI-compatible server). Tests use `with use_llm(FakeLLM([...])):` — don't monkeypatch SDK clients. `core/llm_clients.py` remains only for non-chat APIs (OpenAI embeddings/Whisper/vision, Cohere embed/rerank). Defaults: `default_llm_model`, `default_fast_model` (helper calls), `default_embedding_model`, `default_reranker_model` in `config.py`.
+All chat-model calls go through the `LLMProvider` port: `get_llm(model)` / `get_fast_llm()` from `app.llm`. **Never import the `openai`/`anthropic` SDKs for chat calls elsewhere.** Model strings are bare (`claude-*` → Anthropic, else OpenAI) or provider-qualified (`anthropic:claude-opus-5-5`, `ollama:llama3.1:8b` for endpoints declared in `LLM_ENDPOINTS`). Adapters: `anthropic_provider.py` (no sampling params — the Claude API rejects them; system prompt cached; server-side refusal fallback; thinking blocks replayed unchanged via `LLMResponse.native`), `openai_provider.py` (also every OpenAI-compatible server). Tests use `with use_llm(FakeLLM([...])):` — don't monkeypatch SDK clients. `core/llm_clients.py` remains only for non-chat APIs (OpenAI embeddings/Whisper/vision, Cohere embed/rerank). Defaults: `default_llm_model`, `default_fast_model` (helper calls), `default_embedding_model`, `default_reranker_model` in `config.py`. Compression / conversation summaries / graph extraction use `settings.compression_model` (`DEFAULT_COMPRESSION_MODEL`, falling back to `default_fast_model`) — never hard-code a vendor model name in a service. Known exception: image vision captioning (`extractors.py`) and audio/video transcription still call OpenAI directly; without an OpenAI key images fall back to OCR.
 
 ### Embeddings & the vector column
 One embedding model per deployment (`DEFAULT_EMBEDDING_MODEL`); collections may not override it (422) and ingestion always uses it. `chunks.embedding` is `vector(DEFAULT_EMBEDDING_DIMENSIONS)`: config validation rejects a size that doesn't match a known model (`core/embedding_models.py`, which also holds BGE/E5 query/document prefixes), migration 007 sizes the column on fresh installs but refuses to wipe existing embeddings, and model switches on a live DB go through `python -m app.cli.embeddings status|resize --yes|reembed` (owner connection via `DATABASE_SYNC_URL`; logic in `services/rag/vector_schema.py`). Local models cache under `HF_HOME=/models` (the `model-cache` compose volume).
@@ -71,10 +78,12 @@ Celery specifics: tasks are sync wrappers that run async coroutines via `run_asy
 SQLAlchemy models in `app/models/` (tenant, user, api_key, collection, document, chunk, conversation, usage, audit_log) all carry `tenant_id`. Routes are versioned under `/api/v1` and aggregated in `app/api/v1/router.py` (auth, collections, documents, query, agents, admin, health). Admin actions are recorded via `app/core/audit.py` (`user.login`, `user.created`, `documents.uploaded`, `collection.created`, `tenant.tier_updated`).
 
 ### Frontend (`frontend/src/`)
-React 18 + Vite + Tailwind. State via Zustand (`store/authStore.ts`, `store/themeStore.ts`), data fetching via TanStack Query, API client in `services/api.ts`, streaming chat over SSE via the API client (the old `useWebSocket` hook was removed). Built/served behind nginx (`nginx.conf`) in the container. Env: `VITE_API_URL`, `VITE_WS_URL`.
+React 19 + React Router 7 + Vite 8 + Tailwind 3. Route pages are lazy-loaded (`App.tsx`) under a `Suspense` in `DashboardLayout`. State via Zustand (`store/authStore.ts`, `store/themeStore.ts`), data fetching via TanStack Query, API client in `services/api.ts`, streaming chat over SSE via the API client (the old `useWebSocket` hook was removed). Built/served behind nginx (`nginx.conf`) in the container. Env: `VITE_API_URL`, `VITE_WS_URL`.
 
 ## Conventions & gotchas
 - **Async everywhere** on the backend: SQLAlchemy async sessions, `asyncpg` driver. Use `await db.execute(select(...))`. Sync URL (`database_sync_url`) exists only for Alembic.
 - Enum columns are string enums — use the enum directly, not `.value` (a past bug source noted in `.github/copilot-instructions.md`).
 - Text is sanitized of null bytes / control chars before storage (Postgres rejects `\x00`) — see `tasks.py`.
-- Cost: prefer `gpt-4o-mini` for local/dev work.
+- Cost: prefer `claude-haiku-4-5` or `gpt-4o-mini` for local/dev work.
+- SSE responses must carry `SSE_HEADERS` (`app/api/sse.py`) or nginx buffers the stream.
+- CI fails on known-vulnerable dependencies (`pip-audit`, `npm audit --omit=dev`). The document parsers parse untrusted uploads — keep them current (`tests/test_extractors.py` guards upgrades).

@@ -84,6 +84,10 @@ appears live. The backend offers two transports:
 - **WebSocket** (`/query/ws/chat`) — a full duplex connection; also available for clients that
   prefer it.
 
+Both need proxy configuration to actually stream: nginx buffers responses by default, so the
+backend sends `X-Accel-Buffering: no` on SSE responses, and `nginx.conf` has a dedicated
+`/api/v1/query/ws/` block that forwards the WebSocket upgrade handshake.
+
 ```mermaid
 sequenceDiagram
     participant UI as ChatPage
