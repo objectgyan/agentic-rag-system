@@ -126,7 +126,7 @@ flowchart TB
     subgraph Data[Datastores]
         PG[(PostgreSQL + pgvector. RLS forced, role agentrag_app)]
         REDIS[(Redis: cache, rate-limit, broker)]
-        MINIO[(MinIO or S3: blobs)]
+        MINIO[(S3 object storage: blobs)]
     end
 
     AUTH --> PG
@@ -211,7 +211,7 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-This starts: PostgreSQL + pgvector, Redis, MinIO, FastAPI backend, Celery workers, React frontend.
+This starts: PostgreSQL + pgvector, Redis, S3-compatible object storage (RustFS), FastAPI backend, Celery workers, React frontend.
 
 ### 3. Access
 
@@ -454,7 +454,7 @@ result = await orchestrator.execute(
 
 ### Docker Compose (Recommended)
 The production compose runs non-root containers, no `--reload`, restart policies,
-healthchecks, and keeps Postgres/Redis/MinIO off the host network. It sets
+healthchecks, and keeps Postgres/Redis/object storage off the host network. It sets
 `APP_ENV=production`, so the app refuses to boot unless you provide a strong
 `JWT_SECRET` and non-default MinIO/Postgres credentials in `.env`.
 ```bash

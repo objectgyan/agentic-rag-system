@@ -32,7 +32,7 @@
 - **Frontend**: http://localhost:3001
 - **Backend API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
-- **MinIO Console**: http://localhost:9001 (minioadmin/minioadmin)
+- **Object storage console** (RustFS, S3-compatible): http://localhost:9001 (minioadmin/minioadmin)
 
 ## Common Commands
 

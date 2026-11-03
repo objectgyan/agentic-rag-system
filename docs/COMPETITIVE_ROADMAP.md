@@ -228,7 +228,7 @@ fell back to 0.5 on any non-bare-number reply; Claude models missing from the co
   941 → 375 kB); CI gains `pip-audit`, `npm audit`, a Helm lint/render job and a **full-stack
   e2e job** (compose stack + stub LLM, no key); Dependabot. Helm chart gains `models.*`,
   `extraEnv`, the model cache, and a first-install fix (Secret as a hook). Fixed: SSE buffered
-  by nginx, WebSocket not proxied, MinIO healthcheck, compression/summaries/graph defaulting to
+  by nginx, WebSocket not proxied, the `minio/minio` image no longer published (compose now runs RustFS), compression/summaries/graph defaulting to
   `gpt-4o-mini` on Claude-only deployments, CUDA torch in CPU images. `python -m app.cli.smoke`
   ships the provider smoke test.
 

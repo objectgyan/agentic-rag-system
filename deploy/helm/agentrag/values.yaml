@@ -44,7 +44,7 @@ config:
   redisUrl: redis://redis:6379/0
   celeryBrokerUrl: redis://redis:6379/1
   celeryResultBackend: redis://redis:6379/2
-  minioEndpoint: minio:9000
+  minioEndpoint: minio:9000   # any S3-compatible endpoint (host:port), e.g. RustFS, Ceph, AWS S3
 
 # Which models the app uses (docs/learn/blocks/02-llm-providers.md, 04-retrieval-blocks.md).
 # Empty = the app's default (OpenAI: gpt-4o / gpt-4o-mini / text-embedding-3-small).

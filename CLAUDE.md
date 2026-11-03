@@ -18,7 +18,7 @@ docker-compose logs -f celery-worker              # tail worker logs (where inge
 ```
 
 Service URLs (note these are the host-mapped ports, which differ from internal ports and from some README values):
-- Frontend: http://localhost:3001 · Backend/API docs: http://localhost:8000/docs · MinIO console: http://localhost:9001 (minioadmin/minioadmin)
+- Frontend: http://localhost:3001 · Backend/API docs: http://localhost:8000/docs · object-storage console (RustFS, S3-compatible; the `storage` service): http://localhost:9001 (minioadmin/minioadmin)
 - Postgres is exposed on host **5433**, Redis on **6380** (internal ports are still 5432/6379).
 
 ```bash
