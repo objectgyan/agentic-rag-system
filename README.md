@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-green.svg)](https://python.org)
-[![React 18](https://img.shields.io/badge/React-18-61DAFB.svg)](https://reactjs.org)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://docker.com)
 
@@ -361,11 +361,11 @@ The system automatically logs the following actions:
 - **Usage Analytics**: Charts showing usage by tier limits
 
 ### Tech Stack
-- React 18 + TypeScript
+- React 19 + TypeScript, built with Vite 8
 - Tailwind CSS + Headless UI
 - React Query (TanStack) for data fetching
 - Zustand for state management
-- React Router v6
+- React Router v7
 - Recharts for analytics
 
 ---
@@ -466,10 +466,12 @@ A minimal Helm chart is in [`deploy/helm/agentrag`](deploy/helm/agentrag) (backe
 worker + beat, frontend, a pre-upgrade migration Job, and an env Secret). Postgres / Redis /
 MinIO are expected to be provided (managed services or their own charts) — wire them via
 `config.*` in `values.yaml`. Replace every `CHANGE_ME` first (with `APP_ENV=production` the
-app refuses to boot on default secrets).
+app refuses to boot on default secrets). Pick models with `models.*` (see the Claude-only example
+in `values.yaml`) and give local models a cache with `modelCache.*`.
 ```bash
 helm install agentrag deploy/helm/agentrag \
-  --set secrets.jwtSecret=... --set config.databaseUrl=...
+  --set secrets.jwtSecret=... --set config.databaseUrl=... \
+  --set secrets.anthropicApiKey=... --set models.llm=claude-opus-5-5
 ```
 
 ### Environment Checklist
@@ -488,9 +490,18 @@ helm install agentrag deploy/helm/agentrag \
 # Backend tests
 cd backend && pytest -v --cov=app
 
-# Frontend tests
-cd frontend && npm test
+# Frontend typecheck + build
+cd frontend && npm ci && npm run build
+
+# Live check of the configured models against the real APIs (prints the cost, ~1-2 cents)
+cd backend && python -m app.cli.smoke
+
+# Full stack end to end, no API key needed (also runs in CI)
+cp e2e/e2e.env .env
+docker compose -f docker-compose.yml -f e2e/compose.e2e.yml up -d --build
+python e2e/run_e2e.py --base http://localhost:3001
 ```
+`e2e.env` replaces your `.env` — back yours up first.
 
 ---
 

@@ -82,7 +82,7 @@ blows the context window, inflates cost, and degrades quality. This is the concr
 
 **Acceptance criteria:**
 - [x] History passed to the generator is bounded by a configurable token budget (`conversation_token_budget` + `conversation_recent_messages`) — `conversation_memory.py`, wired into `pipeline.query` + `query_stream`.
-- [x] Old turns are summarized (running summary via `default_compression_model`), not dropped silently; fail-soft.
+- [x] Old turns are summarized (running summary via `settings.compression_model`, which defaults to `DEFAULT_FAST_MODEL`), not dropped silently; fail-soft.
 - [x] A test proves a 50-message conversation stays bounded (`test_fifty_turn_conversation_stays_bounded`); verified end-to-end that the summary retains an early fact.
 - [ ] *(stretch)* Semantic memory — embed past turns and retrieve only the relevant ones.
 
@@ -221,6 +221,16 @@ local embedding model reloaded on every call; Cohere queries embedded as documen
 fell back to 0.5 on any non-bare-number reply; Claude models missing from the cost table.
 
 ## Progress log
+
+- **2026-11-04** — **Hardening + deploy.** Parsers upgraded (pypdf 4 → 6.21, Pillow 10 → 13: 165
+  known advisories on code that parses uploads) with real-file extractor tests; frontend on
+  React 19 / Router 7 / Vite 8 with a lockfile, `npm ci` and lazy-loaded routes (main bundle
+  941 → 375 kB); CI gains `pip-audit`, `npm audit`, a Helm lint/render job and a **full-stack
+  e2e job** (compose stack + stub LLM, no key); Dependabot. Helm chart gains `models.*`,
+  `extraEnv`, the model cache, and a first-install fix (Secret as a hook). Fixed: SSE buffered
+  by nginx, WebSocket not proxied, MinIO healthcheck, compression/summaries/graph defaulting to
+  `gpt-4o-mini` on Claude-only deployments, CUDA torch in CPU images. `python -m app.cli.smoke`
+  ships the provider smoke test.
 
 - **2026-11-03** — **B1 follow-up: runs on an Anthropic key alone.** Configurable vector size
   (startup validation, migration 007, `app.cli.embeddings` resize/reembed), local embedding
