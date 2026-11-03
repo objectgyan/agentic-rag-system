@@ -4,39 +4,31 @@ RAG answers a single question with one retrieval + one generation. An **agent** 
 multiple steps* and *use tools* to accomplish a more open-ended task ("Research X and compare it
 to Y"). Code: `backend/app/services/agents/`.
 
-## The ReAct loop
+## The agent loop (native tool calling)
 
-The agent uses the **ReAct** pattern (Reason + Act). The LLM is prompted to think in a loop of:
+> **Updated in the building-blocks phase.** The agent originally ran a text-parsed **ReAct** loop
+> (the model wrote `Thought:` / `Action:` / `Action Input:` lines that the code scraped). It now
+> uses the providers' **native tool calling**: tools are sent with JSON Schemas and the model
+> returns structured tool calls. The full story, including the security fixes, is in
+> [Building Block 3 — the agent loop](blocks/03-agent-loop.md).
 
-```
-Thought:  (what should I do next?)
-Action:   <tool name>
-Action Input: {"param": "value"}
-Observation: (the tool's result, fed back in)
-... repeat ...
-Thought: I now have enough information.
-Final Answer: ...
-```
-
-The orchestrator (`orchestrator.py`) runs this loop: it calls the LLM, **parses the text** for
-`Action`/`Action Input`, runs the named tool, appends the `Observation`, and calls the LLM
-again — until the model emits `Final Answer` or it hits `max_steps`.
+The orchestrator (`orchestrator.py`) calls the LLM with the task and the tool specs. If the reply
+contains tool calls, it runs each tool, appends the results, and calls the LLM again — until the
+model replies without tool calls (the final answer) or it hits `max_steps`.
 
 ```mermaid
 flowchart TB
-    START[Task + system prompt] --> LLM[Call LLM]
-    LLM --> P{Parse response}
-    P -->|Final Answer| DONE[Return answer + full trace]
-    P -->|Action + Input| TOOL[Run the tool]
-    TOOL --> OBS[Append Observation]
+    START[Task + system prompt + tool schemas] --> LLM[Call LLM]
+    LLM --> P{Tool calls in reply?}
+    P -->|no| DONE[Return answer + full trace]
+    P -->|yes| TOOL[Run each requested tool]
+    TOOL --> OBS[Append tool results]
     OBS --> LLM
     P -->|max_steps reached| DONE
 ```
 
-> Note: this is "manual" ReAct — the model emits text we parse, rather than using the
-> provider's native function-calling API. It's simpler to follow and provider-agnostic, at the
-> cost of being more fragile to formatting. A production v2 would likely switch to native tool
-> calling. Worth understanding both.
+> **ReAct is still worth knowing**: it is the idea (interleave reasoning with actions, observe,
+> repeat) that native tool calling now implements in a structured, trained-for format.
 
 The four agent "types" (`research`, `analyst`, `summarizer`, `code`) are **just different system
 prompts** over the same loop and tools — not different engines.

@@ -32,7 +32,7 @@ flowchart TB
         end
 
         subgraph AGENTS[Agent orchestrator]
-            REACT[ReAct loop + tools] --> DELEG[delegate to depth-bounded sub-agent]
+            REACT[native tool-calling loop + tools] --> DELEG[delegate to depth-bounded sub-agent]
         end
 
         ROUTES --> RAG
@@ -102,8 +102,12 @@ and knowledge-graph facts → conversation-memory bounding → generation with f
 Every advanced step is opt-in per request and degrades gracefully; a per-query trace (latencies,
 chunk scores, tokens, cost) is available via `trace=true`.
 
-**Agents.** A ReAct orchestrator over a tool registry; agents can `delegate` to a
-depth-bounded sub-agent.
+**Agents.** A native tool-calling loop over a tool registry (JSON-Schema tools, provider-neutral
+via the `app/llm` port); agents can `delegate` to a depth-bounded sub-agent.
+
+**LLM port.** Every chat-model call goes through `LLMProvider` (`app/llm/`): Anthropic, OpenAI,
+or any OpenAI-compatible endpoint (Azure, Ollama, vLLM, …), selected by model string. See
+[`learn/blocks/`](learn/blocks/README.md) for every component as a reusable building block.
 
 **Async ingestion.** Uploads enqueue a Celery task via Redis; the worker pool extracts →
 chunks → embeds → (optionally) extracts knowledge-graph triples, writing to Postgres and

@@ -10,7 +10,8 @@
 
 > 📚 **New to the stack?** The [**Learning Guide**](docs/learn/README.md) explains every component
 > from scratch (assuming a .NET background, not Python), with diagrams and a rebuild-it-yourself path.
-> See also the [**Architecture diagram**](docs/ARCHITECTURE.md).
+> See also the [**Architecture diagram**](docs/ARCHITECTURE.md), and [**Building Blocks**](docs/learn/blocks/README.md)
+> — every component as a reusable block (port, adapters, fake) with "swap it for a client" recipes.
 
 ---
 
@@ -117,7 +118,7 @@ flowchart TB
             ENH[Enhance: HyDE, multi-query] --> RET[Hybrid retrieval: dense pgvector + Postgres FTS + RRF]
             RET --> RR[Re-rank: cross-encoder + business boosts] --> MH[Multi-hop] --> CMP[Compression] --> KG[Knowledge graph] --> GEN[Generate + citations]
         end
-        AGENTS[Agent orchestrator: ReAct + delegation]
+        AGENTS[Agent orchestrator: native tool calling + delegation]
         ROUTES --> RAG
         ROUTES --> AGENTS
     end
@@ -438,7 +439,7 @@ result = await orchestrator.execute(
     task="...",
     agent_type="research",   # research | analyst | summarizer | code
     model="gpt-4o-mini",
-)  # ReAct loop (Thought/Action/Observation) over a ToolRegistry
+)  # native tool-calling loop over a ToolRegistry (any provider via app/llm)
 ```
 
 ---

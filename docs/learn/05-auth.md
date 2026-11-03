@@ -48,7 +48,7 @@ def decode_token(token):
 ```
 
 .NET analogy: this is exactly `Microsoft.AspNetCore.Authentication.JwtBearer` + `System.IdentityModel.Tokens.Jwt`,
-just hand-rolled with the `python-jose` library. The `type` claim lets us reject a refresh token
+just hand-rolled with the `PyJWT` library (which replaced the unmaintained `python-jose`). The `type` claim lets us reject a refresh token
 where an access token is required, and vice-versa.
 
 ### The login → token → request loop
