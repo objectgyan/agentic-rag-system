@@ -13,7 +13,9 @@
 
 2. **Configure Required Variables**:
    - `OPENAI_API_KEY` - Your OpenAI API key (required)
-   - `DEFAULT_LLM_MODEL` - Use `gpt-4o-mini` for cost-effective operation
+   - `DEFAULT_LLM_MODEL` - Use `gpt-4o-mini` (or `claude-haiku-4-5`) for cost-effective operation;
+     any model string works, incl. provider-qualified ones like `ollama:llama3.1:8b` (see `docs/learn/blocks/01-llm-provider.md`)
+   - `DEFAULT_FAST_MODEL` - cheap model for helper calls (HyDE, compression, judging)
    - `JWT_SECRET` - Generate a secure random string
 
 3. **Start the Application**:

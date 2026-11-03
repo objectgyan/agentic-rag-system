@@ -14,8 +14,9 @@ flowchart TB
     REQ["POST /api/v1/query<br/>{ question, conversation_id? }"] --> MW["Middleware:<br/>decode JWT → tenant_id"]
     MW --> DEP["Dependency get_current_user:<br/>SET app.current_tenant (RLS)"]
     DEP --> HIST["Load conversation history<br/>(if conversation_id)"]
-    HIST --> PIPE["RAGPipeline.query()"]
-    PIPE --> ENH{"Query enhancement?<br/>HyDE / multi-query"}
+    HIST --> POL["assert_model_allowed:<br/>tier may use this model?"]
+    POL --> PIPE["RAGPipeline.query()<br/>runs its stages"]
+    PIPE --> ENH{"Stages: route?<br/>HyDE / multi-query?"}
     ENH --> RET["HybridRetriever.retrieve()"]
     RET --> DENSE["Dense: embed query →<br/>pgvector cosine top-15"]
     RET --> SPARSE["Sparse: Postgres FTS<br/>(ts_rank)"]
@@ -24,7 +25,7 @@ flowchart TB
     RRF --> RR["Rerank (cross-encoder)<br/>→ top-5"]
     RR --> GEN["GenerationService.generate()<br/>LLM writes answer w/ [Source N]"]
     GEN --> CITE["Keep only cited sources"]
-    CITE --> USAGE["Record UsageRecord"]
+    CITE --> USAGE["Record UsageRecord<br/>(tokens + cost)"]
     USAGE --> RESP["Response: answer + citations"]
 ```
 
@@ -63,10 +64,15 @@ older turns into a running summary — so a long chat can't blow the context win
 
 **Vocabulary:** *conversation memory, context window.*
 
-## 4. Into the pipeline — optional query enhancement
+Before any model work, `assert_model_allowed` checks that the tenant's tier may use the requested
+`model` (free tier: the cheap models only) — a 403 here, not a surprise bill later.
 
-`RAGPipeline.query()` orchestrates the rest. Every advanced step is **opt-in per request** and
-**degrades gracefully** (a failed optional LLM call is logged into a `degraded` list, not fatal).
+## 4. Into the pipeline — the stages
+
+`RAGPipeline.query()` runs an ordered list of **stages** (`stages.py`): route → HyDE → retrieve →
+business re-rank → compression → graph → conversation memory. Each checks whether its option is on;
+optional ones **degrade gracefully** (a failed LLM call is logged into a `degraded` list, not fatal).
+The streaming endpoint runs exactly the same stages. (Design: [Building Block 2](blocks/02-pipeline-stages.md).)
 
 For our simple question, enhancement is off. Had we set `use_hyde=true`, the query would first be
 rewritten into a hypothetical answer passage (see [HyDE](13-rag-glossary.md#6-query-understanding))
@@ -120,8 +126,10 @@ Context:
 [Source 2] ...
 Question: Who led the Apollo internal project?
 ```
-— and calls the LLM (`gpt-4o-mini`, **temperature 0.1** for factual answers). Provider is picked by
-the model-name string. The model writes: *"The Apollo internal project was led by engineer Maria Chen
+— and calls the LLM through the **LLM port** (`get_llm(model)` → the Anthropic, OpenAI, or
+OpenAI-compatible adapter; see [Building Block 1](blocks/01-llm-provider.md)). Here the model was
+`gpt-4o-mini` with a low temperature hint (Claude models ignore sampling parameters; grounding comes
+from the prompt). The model writes: *"The Apollo internal project was led by engineer Maria Chen
 [Source 1]."*
 
 **Vocabulary:** *prompt, system prompt, grounding, temperature, provider routing.*
@@ -129,15 +137,17 @@ the model-name string. The model writes: *"The Apollo internal project was led b
 ## 8. Citation filtering
 
 `_extract_cited_sources` parses the answer for `[Source N]` markers and returns **only the sources the
-answer actually cited** (here, Source 1) — enriched with the document name via a lookup. So the
+answer actually cited** (here, Source 1) — enriched with document names in a single lookup. So the
 "Sources" list reflects what *truly grounded* the answer, not everything retrieved.
 
 **Vocabulary:** *citation, grounding, hallucination (its absence).*
 
 ## 9. Usage + response
 
-A `UsageRecord` is written (tokens, model, period) for billing/limits, and the response returns the
-answer, the filtered citations, `retrieval_time_ms`, and the `degraded` list. Done.
+A `UsageRecord` is written (tokens, model, estimated cost, period) for billing/limits, and the
+response returns the answer, the filtered citations, `retrieval_time_ms`, and the `degraded` list.
+With `trace=true` it also returns the trace: one span per stage (`stage.retrieve`, …), plus
+`retrieve` and `generate`, chunk scores, tokens and cost. Done.
 
 **Vocabulary:** *usage metering, tokens.*
 
@@ -146,7 +156,8 @@ answer, the filtered citations, `retrieval_time_ms`, and the `degraded` list. Do
 ## The same trace, as a sentence you can say out loud
 
 > "A query comes in, we decode the JWT and set the Postgres RLS tenant context so everything's
-> isolated. The pipeline optionally rewrites the query with HyDE, then does **hybrid retrieval** —
+> isolated, and check the tenant may use the requested model. The pipeline runs its stages — optionally
+> rewriting the query with HyDE — then does **hybrid retrieval** —
 > dense pgvector search for meaning plus Postgres full-text search for keywords, fused with RRF. A **cross-encoder
 > reranker** sharpens the top results, the LLM writes a grounded answer citing `[Source N]`, and we
 > return only the sources it actually cited. Every hop degrades gracefully and we meter usage per
