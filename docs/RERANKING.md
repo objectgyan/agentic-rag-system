@@ -181,7 +181,7 @@ re-rank, driven by an agent that sets the context. Reuse this repo's patterns; d
 | Stage-2 re-rank slot | `_rerank` / `_rerank_local` / `_rerank_cohere` | `retriever.py` |
 | A candidate carrying ranking features | `RetrievedChunk` has a `metadata` dict already | `retriever.py` |
 | Provider-config pattern | `cohere_api_key`, `default_reranker_model`, `local_reranker_model` | `core/config.py` |
-| Agentic routing | ReAct loop + `ToolRegistry` | `services/agents/` |
+| Agentic routing | native tool-calling loop + `ToolRegistry` | `services/agents/` |
 
 ### Stage 0 — Model the domain
 

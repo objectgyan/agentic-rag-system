@@ -256,14 +256,14 @@ tiers:
     storage_gb: 1
     max_collections: 5
     concurrent_queries: 2
-    models: [gpt-4o-mini]
+    models: [gpt-4o-mini, claude-haiku-4-5]   # enforced per request (assert_model_allowed)
   pro:
     requests_per_minute: 60
     documents_per_month: 1000
     storage_gb: 50
     max_collections: 50
     concurrent_queries: 10
-    models: [gpt-4o, gpt-4o-mini, claude-3-5-sonnet-20241022]
+    models: [gpt-4o, gpt-4o-mini, claude-haiku-4-5, claude-sonnet-5-5, claude-opus-5-5]
   enterprise:
     requests_per_minute: 300
     documents_per_month: unlimited

@@ -79,6 +79,8 @@ appears live. The backend offers two transports:
 - **Server-Sent Events (SSE)** — a one-way stream of `data: {...}` lines over a normal HTTP
   response. The chat reads it with `fetch` + a `ReadableStream` reader, parsing `token` and
   `citations` events (see `ChatPage.tsx`, `streamQuery`). Simple and what the UI uses by default.
+  Event order: `token`… → `citations` (if any) → `done` (model, tokens, degraded stages, optional
+  trace) → `[DONE]`. Unknown event types should be ignored, so the server can add fields safely.
 - **WebSocket** (`/query/ws/chat`) — a full duplex connection; also available for clients that
   prefer it.
 
@@ -92,6 +94,7 @@ sequenceDiagram
         UI->>UI: append to the message (live render)
     end
     API-->>UI: data: {"type":"citations", ...}
+    API-->>UI: data: {"type":"done", "tokens_used": ..., "degraded": [...]}
     API-->>UI: data: [DONE]
 ```
 

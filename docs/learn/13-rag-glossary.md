@@ -175,9 +175,16 @@ Claude, OpenAI, or OpenAI-compatible model via config). Reached through the `LLM
 **Prompt** — the assembled input: system instructions + retrieved context + the question. **System
 prompt** — the standing instructions ("answer only from context, cite `[Source N]`").
 
-**Temperature** — the randomness dial (0 = deterministic/factual, higher = creative). RAG uses low
-temperature (0.1) — you want faithful, not imaginative. *Say it like:* "Keep temperature low for RAG;
-we're not writing poetry."
+**Temperature** — the randomness dial (0 = deterministic/factual, higher = creative). Older advice:
+use low temperature for RAG. Current reality: the Claude API no longer accepts sampling parameters,
+and reasoning models (OpenAI o-series / gpt-5) reject non-default values — so in this repo
+`temperature` is a *hint* the adapter drops where unsupported. Faithfulness comes from the prompt
+("answer only from the context"), citations, and evaluation, not from a dial. *Say it like:*
+"Grounding is a prompt-and-eval problem, not a temperature setting."
+
+**Effort / reasoning effort** — how hard a reasoning model thinks before answering
+(`low`/`medium`/`high`). Low for cheap helper calls (query rewrites, judging), higher for hard
+answers. → `effort=` on `LLMProvider.complete()`.
 
 **Citation** — the `[Source N]` reference tying a claim to the chunk it came from. This repo does a
 neat trick: it parses the answer and returns **only the sources actually cited**, not everything

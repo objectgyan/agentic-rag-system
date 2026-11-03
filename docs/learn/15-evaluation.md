@@ -84,6 +84,12 @@ the **full pipeline** for the answer, and scores the answer with the existing **
 plus the substring checks. It aggregates everything into an `EvalReport` (per-case + means), and a bad
 case is caught and recorded rather than aborting the run.
 
+`--model` sets both the answering model and the judge; without it, answers use `DEFAULT_LLM_MODEL`
+and the judge uses `DEFAULT_FAST_MODEL`. Any provider works (`--model claude-opus-5-5`,
+`--model ollama:llama3.1:8b`). The judge's four metrics run concurrently, and scores are parsed
+tolerantly (`evaluator.parse_score` takes the first number in [0, 1], so a reply like "Score: 0.8"
+isn't silently scored as the 0.5 default).
+
 ### The CLI — `__main__.py`
 
 ```bash
