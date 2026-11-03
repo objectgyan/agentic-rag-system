@@ -19,6 +19,8 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: backend
     spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: backend
           image: {{ .Values.image.backend }}
@@ -29,7 +31,7 @@ spec:
             - containerPort: 8000
           envFrom:
             - secretRef:
-                name: {{ include "agentrag.fullname" . }}-env
+                name: {{ include "agentrag.envSecret" . }}
           readinessProbe:
             httpGet:
               path: /api/v1/health
@@ -38,6 +40,10 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "agentrag.modelCacheMount" . | nindent 12 }}
+      volumes:
+        {{- include "agentrag.modelCacheVolume" . | nindent 8 }}
 ---
 apiVersion: v1
 kind: Service

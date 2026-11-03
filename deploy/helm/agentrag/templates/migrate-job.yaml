@@ -24,4 +24,4 @@ spec:
           command: ["alembic", "upgrade", "head"]
           envFrom:
             - secretRef:
-                name: {{ include "agentrag.fullname" . }}-env
+                name: {{ include "agentrag.envSecret" . }}

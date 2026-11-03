@@ -46,6 +46,50 @@ config:
   celeryResultBackend: redis://redis:6379/2
   minioEndpoint: minio:9000
 
+# Which models the app uses (docs/learn/blocks/02-llm-providers.md, 04-retrieval-blocks.md).
+# Empty = the app's default (OpenAI: gpt-4o / gpt-4o-mini / text-embedding-3-small).
+# The embedding model and its dimensions must match — the app refuses to start otherwise — and
+# migration 007 sizes the vector column from them on first install.
+# Claude-only example (needs only secrets.anthropicApiKey):
+#   llm: claude-opus-5-5
+#   fastModel: claude-haiku-4-5
+#   embeddingModel: BAAI/bge-small-en-v1.5
+#   embeddingDimensions: 384
+#   localRerankerModel: cross-encoder/ms-marco-MiniLM-L-6-v2
+models:
+  llm: ""                   # DEFAULT_LLM_MODEL
+  fastModel: ""             # DEFAULT_FAST_MODEL (rewrites, judge, compression, summaries)
+  embeddingModel: ""        # DEFAULT_EMBEDDING_MODEL
+  embeddingDimensions: ""   # DEFAULT_EMBEDDING_DIMENSIONS
+  localRerankerModel: ""    # LOCAL_RERANKER_MODEL (used when no Cohere key is set)
+  # LLM_ENDPOINTS: extra OpenAI/Anthropic-compatible providers by name, rendered as JSON, e.g.
+  #   ollama: {base_url: "http://ollama:11434/v1"}
+  endpoints: {}
+
+# Any other setting from app/core/config.py, as ENV_NAME: value (e.g. CORS_ORIGINS).
+extraEnv: {}
+
+# Pod security context for backend + worker. The image runs as uid 10001; fsGroup makes mounted
+# volumes (the model-cache PVC, whose root is usually owned by root) writable by it.
+podSecurityContext:
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+
+# Local embedding / re-ranking models are downloaded into HF_HOME (/models) on first use
+# (~100-500 MB each). Only matters when a local model is configured above.
+#   persistence.enabled=false -> an emptyDir per pod: survives container restarts, not pod
+#     rescheduling, so each new pod downloads once.
+#   persistence.enabled=true  -> one PVC shared by backend + worker pods. Needs ReadWriteMany
+#     storage (EFS, Azure Files, Filestore, NFS) when pods span nodes.
+modelCache:
+  sizeLimit: 5Gi
+  persistence:
+    enabled: false
+    existingClaim: ""
+    storageClass: ""
+    accessMode: ReadWriteMany
+    size: 5Gi
+
 # Secrets — provide via --set, a values override, or an external secret manager.
 secrets:
   jwtSecret: CHANGE_ME_TO_A_LONG_RANDOM_STRING

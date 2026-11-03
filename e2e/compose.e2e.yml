@@ -1,0 +1,20 @@
+# Overlay for the end-to-end test: adds the stub LLM. Used as
+#   cp e2e/e2e.env .env
+#   docker compose -f docker-compose.yml -f e2e/compose.e2e.yml up -d --build
+# Relative paths resolve from the repo root (the first compose file's directory).
+services:
+  stub-llm:
+    image: python:3.11-slim
+    command: python /e2e/stub_llm.py
+    volumes:
+      - ./e2e:/e2e:ro
+
+  backend:
+    depends_on:
+      stub-llm:
+        condition: service_started
+
+  celery-worker:
+    depends_on:
+      stub-llm:
+        condition: service_started

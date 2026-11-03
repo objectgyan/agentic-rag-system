@@ -1,0 +1,17 @@
+{{- if and .Values.modelCache.persistence.enabled (not .Values.modelCache.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agentrag.modelCacheClaim" . }}
+  labels:
+    {{- include "agentrag.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.modelCache.persistence.accessMode }}
+  {{- with .Values.modelCache.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.modelCache.persistence.size }}
+{{- end }}
