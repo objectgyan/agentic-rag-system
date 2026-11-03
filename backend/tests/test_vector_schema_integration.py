@@ -34,6 +34,7 @@ async def test_resize_then_reembed_round_trip():
                 await conn.execute(text("SELECT 1"))
             except Exception as exc:  # pragma: no cover - environment dependent
                 pytest.skip(f"database not reachable: {exc}")
+            await conn.rollback()  # end the probe's implicit transaction before starting ours
             tx = await conn.begin()
             try:
                 tenant, coll, doc = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
