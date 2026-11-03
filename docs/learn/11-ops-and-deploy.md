@@ -36,7 +36,7 @@ flowchart TB
     F[frontend image] --> FE[nginx serving the SPA]
 ```
 
-`docker-compose.yml` wires up **7 services**: postgres, redis, minio, backend, celery-worker,
+`docker-compose.yml` wires up **7 services**: postgres, redis, storage (RustFS, S3-compatible), backend, celery-worker,
 celery-beat, frontend — plus the network and volumes between them. `docker-compose up -d` starts
 the whole stack locally. This is the dev environment.
 
@@ -95,8 +95,12 @@ were treated as bugs.
 
 Tracing every hop the e2e job crosses surfaced three bugs no unit test could: SSE answers were buffered by nginx
 and arrived in one lump (fixed with `X-Accel-Buffering: no`, `app/api/sse.py`), the WebSocket
-route wasn't proxied with the upgrade handshake (`nginx.conf`), and the MinIO healthcheck called
-`curl`, which the image no longer ships (now `mc ready local`).
+route wasn't proxied with the upgrade handshake (`nginx.conf`), and — found by the first CI run —
+the `minio/minio` image no longer exists on Docker Hub (MinIO stopped publishing free images in
+2025), so `docker compose up` failed for everyone. The `storage` service now runs RustFS
+(Apache-2.0, MinIO-compatible API and ports); the app talks plain S3 through the `minio` client
+library, so nothing else changed. Its data lives in a new `storagedata` volume — blobs in an old
+`miniodata` volume can be copied over with any S3 tool (`rclone sync`, `aws s3 sync`).
 
 **Supply chain.** Both audits fail the build on a known-vulnerable dependency, and
 `.github/dependabot.yml` opens weekly grouped update PRs (pip, npm, Actions, base images) that

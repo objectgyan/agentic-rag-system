@@ -28,19 +28,22 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  # S3-compatible object storage for uploads. RustFS: Apache-2.0, MinIO-compatible API and ports
+  # (MinIO stopped publishing its free Docker images in 2025). The app's MINIO_* settings and the
+  # `minio` Python client work with any S3 server — AWS S3, R2, GCS (interop), Ceph, SeaweedFS.
+  storage:
+    image: rustfs/rustfs:1.0.4
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      RUSTFS_ACCESS_KEY: minioadmin   # = MINIO_ACCESS_KEY / MINIO_SECRET_KEY defaults
+      RUSTFS_SECRET_KEY: minioadmin
+      RUSTFS_CONSOLE_ENABLE: "true"
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - miniodata:/data
+      - storagedata:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]   # the image ships mc, not curl
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -60,7 +63,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
-      MINIO_ENDPOINT: minio:9000
+      MINIO_ENDPOINT: storage:9000
       # Local embedding / re-ranking models (sentence-transformers) download here once.
       HF_HOME: /models
     depends_on:
@@ -68,7 +71,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      storage:
         condition: service_healthy
     volumes:
       - ./backend:/app
@@ -90,7 +93,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
-      MINIO_ENDPOINT: minio:9000
+      MINIO_ENDPOINT: storage:9000
       # Worker metrics exporter (prefork-safe prometheus multiprocess mode).
       PROMETHEUS_MULTIPROC_DIR: /tmp/prom_multiproc
       WORKER_METRICS_PORT: "9100"
@@ -135,4 +138,4 @@ volumes:
   model-cache:
   pgdata:
   redisdata:
-  miniodata:
+  storagedata:

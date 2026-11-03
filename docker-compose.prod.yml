@@ -48,17 +48,18 @@ services:
         limits:
           memory: 512m
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    env_file: .env
+  # S3-compatible object storage for uploads. RustFS: Apache-2.0, MinIO-compatible API and ports
+  # (MinIO stopped publishing its free Docker images in 2025). The app's MINIO_* settings and the
+  # `minio` Python client work with any S3 server — AWS S3, R2, GCS (interop), Ceph, SeaweedFS.
+  storage:
+    image: rustfs/rustfs:1.0.4
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY in .env}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY in .env}
+      RUSTFS_ACCESS_KEY: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY in .env}
+      RUSTFS_SECRET_KEY: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY in .env}
     volumes:
-      - miniodata:/data
+      - storagedata:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]   # the image ships mc, not curl
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -81,7 +82,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
-      MINIO_ENDPOINT: minio:9000
+      MINIO_ENDPOINT: storage:9000
     volumes:
       - model-cache:/models   # local embedding/re-ranking models (HF_HOME, set in the Dockerfile)
     depends_on:
@@ -89,7 +90,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      storage:
         condition: service_healthy
     command: >
       sh -c "alembic upgrade head &&
@@ -117,7 +118,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
-      MINIO_ENDPOINT: minio:9000
+      MINIO_ENDPOINT: storage:9000
       # Worker metrics exporter (scraped internally; not published to the host).
       PROMETHEUS_MULTIPROC_DIR: /tmp/prom_multiproc
       WORKER_METRICS_PORT: "9100"
@@ -178,4 +179,4 @@ volumes:
   model-cache:
   pgdata:
   redisdata:
-  miniodata:
+  storagedata:
