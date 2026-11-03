@@ -17,6 +17,7 @@ from app.api.deps.access import (
     assert_model_allowed,
 )
 from app.api.deps.auth import get_current_user
+from app.api.sse import SSE_HEADERS
 from app.core.database import get_db, set_tenant_context
 from app.core.metrics import (
     rag_generation_seconds,
@@ -188,7 +189,7 @@ async def query_stream(
             await _persist_turn(db, user, conversation, req.query, full_answer, final_citations)
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @router.websocket("/ws/chat")

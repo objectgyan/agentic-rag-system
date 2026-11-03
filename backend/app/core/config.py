@@ -124,14 +124,15 @@ class Settings(BaseSettings):
     # Optional local cross-encoder (sentence-transformers) used for re-ranking when no
     # Cohere key is set, e.g. "cross-encoder/ms-marco-MiniLM-L-6-v2". Heavy (pulls torch).
     local_reranker_model: Optional[str] = None
-    # Cheap, fast model for contextual compression — a simple extraction task (A2).
-    default_compression_model: str = "gpt-4o-mini"
+    # Model for contextual compression, conversation summaries and graph extraction — simple
+    # extraction tasks (A2). Unset = DEFAULT_FAST_MODEL, so a Claude-only deployment stays on Claude.
+    default_compression_model: Optional[str] = None
 
     # Conversation memory (competitive-phase item 2): bound the chat history sent to the
     # generator so long sessions can't blow the context window or inflate cost. The most
     # recent `conversation_recent_messages` messages are kept verbatim (trimmed to
     # `conversation_token_budget` tokens); older turns are distilled into a running summary
-    # (via default_compression_model) when `conversation_summary_enabled`.
+    # (via `compression_model`) when `conversation_summary_enabled`.
     conversation_recent_messages: int = 6
     conversation_token_budget: int = 1500
     conversation_summary_enabled: bool = True
@@ -144,6 +145,10 @@ class Settings(BaseSettings):
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
+
+    @property
+    def compression_model(self) -> str:
+        return self.default_compression_model or self.default_fast_model
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.access import assert_collections_accessible, assert_model_allowed
 from app.api.deps.auth import get_current_user
+from app.api.sse import SSE_HEADERS
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.agent import AgentExecuteRequest, AgentExecuteResponse
@@ -97,7 +98,7 @@ async def stream_agent(
         await db.commit()
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 # Tools each agent type is suited to. Filtered against the registry before returning,

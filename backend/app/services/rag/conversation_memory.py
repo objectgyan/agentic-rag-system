@@ -65,7 +65,7 @@ class ConversationMemory:
         self.summary_enabled = (
             summary_enabled if summary_enabled is not None else settings.conversation_summary_enabled
         )
-        self.summary_model = summary_model or settings.default_compression_model
+        self.summary_model = summary_model or settings.compression_model
 
     def _message_tokens(self, msg: Dict[str, str]) -> int:
         return count_tokens(msg.get("content", "")) + _PER_MESSAGE_OVERHEAD

@@ -31,7 +31,7 @@ _SYSTEM_PROMPT = (
 
 class ContextualCompressor:
     def __init__(self, model: Optional[str] = None):
-        self.model = model or settings.default_compression_model
+        self.model = model or settings.compression_model
 
     async def compress(self, query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChunk]:
         if not chunks:
