@@ -42,7 +42,7 @@ beautifulsoup4==4.12.3
 pytesseract==0.3.10
 Pillow==13.0.0
 pydub==0.25.1
-aiofiles==23.2.1
+aiofiles==25.1.0
 
 # --- Observability ---
 prometheus-client==0.26.0
