@@ -45,3 +45,4 @@ minio-data/
 
 # Windows / MSYS crash dumps
 *.stackdump
+*.tsbuildinfo

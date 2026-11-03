@@ -19,6 +19,8 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: worker
     spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: worker
           image: {{ .Values.image.backend }}
@@ -32,9 +34,13 @@ spec:
               containerPort: 9100
           envFrom:
             - secretRef:
-                name: {{ include "agentrag.fullname" . }}-env
+                name: {{ include "agentrag.envSecret" . }}
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "agentrag.modelCacheMount" . | nindent 12 }}
+      volumes:
+        {{- include "agentrag.modelCacheVolume" . | nindent 8 }}
 {{- if .Values.beat.enabled }}
 ---
 apiVersion: apps/v1
@@ -65,5 +71,5 @@ spec:
           command: ["celery", "-A", "app.core.celery_app", "beat", "-l", "info"]
           envFrom:
             - secretRef:
-                name: {{ include "agentrag.fullname" . }}-env
+                name: {{ include "agentrag.envSecret" . }}
 {{- end }}

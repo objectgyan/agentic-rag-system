@@ -1,18 +1,24 @@
-import { useEffect } from 'react';
+import { lazy, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import LoginPage from './components/auth/LoginPage';
 import RegisterPage from './components/auth/RegisterPage';
 import DashboardLayout from './components/dashboard/DashboardLayout';
-import ChatPage from './components/chat/ChatPage';
-import DocumentsPage from './components/documents/DocumentsPage';
-import CollectionsPage from './components/documents/CollectionsPage';
-import SettingsPage from './components/settings/SettingsPage';
-import OverviewPage from './components/dashboard/OverviewPage';
+
+// Pages load on first visit, so the login screen doesn't download charts and markdown rendering.
+const ChatPage = lazy(() => import('./components/chat/ChatPage'));
+const DocumentsPage = lazy(() => import('./components/documents/DocumentsPage'));
+const CollectionsPage = lazy(() => import('./components/documents/CollectionsPage'));
+const SettingsPage = lazy(() => import('./components/settings/SettingsPage'));
+const OverviewPage = lazy(() => import('./components/dashboard/OverviewPage'));
+
+function Spinner() {
+  return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" /></div>;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
-  if (isLoading) return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" /></div>;
+  if (isLoading) return <Spinner />;
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 }
 

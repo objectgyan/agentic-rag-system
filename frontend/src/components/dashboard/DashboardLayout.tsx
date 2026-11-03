@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -91,7 +91,10 @@ export default function DashboardLayout() {
           <span className="font-bold text-gray-900 dark:text-white">AgentRAG</span>
         </header>
         <div className="flex-1 overflow-auto">
-          <Outlet />
+          {/* Pages are lazy-loaded (App.tsx); the sidebar stays put while one loads. */}
+          <Suspense fallback={<div className="flex justify-center p-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" /></div>}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
     </div>
