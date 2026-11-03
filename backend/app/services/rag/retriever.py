@@ -44,10 +44,14 @@ class HybridRetriever:
         db: AsyncSession,
         tenant_id: str,
         embedding_service: Optional[EmbeddingService] = None,
+        reranker=None,
     ):
         self.db = db
         self.tenant_id = tenant_id
         self.embedder = embedding_service or EmbeddingService()
+        # Optional semantic re-ranker implementing ranking.Reranker (async rerank(query, chunks,
+        # top_k)). When unset, the built-in routing below picks Cohere -> local cross-encoder -> none.
+        self.reranker = reranker
 
     async def retrieve(
         self,
@@ -203,6 +207,13 @@ class HybridRetriever:
         """
         if not chunks:
             return chunks
+
+        if self.reranker is not None:
+            try:
+                return await self.reranker.rerank(query, chunks, top_k)
+            except Exception:
+                logger.warning("custom re-ranker failed; using fused order", exc_info=True)
+                return chunks[:top_k]
 
         if settings.cohere_api_key:
             try:

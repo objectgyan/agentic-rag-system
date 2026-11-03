@@ -34,7 +34,7 @@ def _service_with_counting_embed(monkeypatch):
     svc = EmbeddingService(model="text-embedding-3-small")
     calls = {"n": 0}
 
-    async def fake_embed_texts(texts):
+    async def fake_embed_texts(texts, **kwargs):
         calls["n"] += 1
         return [[0.1, 0.2, 0.3] for _ in texts]
 

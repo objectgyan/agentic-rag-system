@@ -1,9 +1,25 @@
-"""Embedding service supporting multiple providers."""
+"""Embedding service: one interface over OpenAI, Cohere, and local sentence-transformers models.
 
-from typing import List, Optional
+Documents and queries are embedded through separate entry points (``embed_texts`` vs
+``embed_query``) because asymmetric models — Cohere v3+, Voyage, E5, BGE — embed them
+differently (``input_type`` / instruction prefixes). Mixing them up quietly lowers recall.
+"""
+
+from typing import Dict, List, Optional
 
 from app.core.config import settings
 from app.core.llm_clients import cohere_client, openai_client
+
+# Local models are loaded once per process: loading pulls torch weights and takes seconds.
+_local_models: Dict[str, object] = {}
+
+
+def _get_local_model(name: str):
+    if name not in _local_models:
+        from sentence_transformers import SentenceTransformer
+
+        _local_models[name] = SentenceTransformer(name)
+    return _local_models[name]
 
 
 class EmbeddingService:
@@ -24,15 +40,15 @@ class EmbeddingService:
         }
         return dim_map.get(self.model, settings.default_embedding_dimensions)
 
-    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
-        """Embed a batch of texts."""
+    async def embed_texts(self, texts: List[str], input_type: str = "search_document") -> List[List[float]]:
+        """Embed a batch of texts (documents by default; ``embed_query`` passes "search_query")."""
         if not texts:
             return []
 
         if self.model.startswith("text-embedding"):
             return await self._embed_openai(texts)
         elif self.model.startswith("embed-"):
-            return await self._embed_cohere(texts)
+            return await self._embed_cohere(texts, input_type)
         else:
             return await self._embed_local(texts)
 
@@ -43,7 +59,7 @@ class EmbeddingService:
             if cached is not None:
                 return cached
 
-        results = await self.embed_texts([query])
+        results = await self.embed_texts([query], input_type="search_query")
         vec = results[0] if results else []
 
         if settings.embedding_cache_enabled and vec:
@@ -111,21 +127,25 @@ class EmbeddingService:
             all_embeddings.extend([e.embedding for e in response.data])
         return all_embeddings
 
-    async def _embed_cohere(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings using Cohere API."""
+    async def _embed_cohere(self, texts: List[str], input_type: str) -> List[List[float]]:
+        """Generate embeddings using the Cohere v2 API (96 texts per request max)."""
         client = cohere_client()
-
-        response = await client.embed(
-            texts=texts,
-            model=self.model,
-            input_type="search_document",
-        )
-        return [list(e) for e in response.embeddings]
+        out: List[List[float]] = []
+        for i in range(0, len(texts), 96):
+            response = await client.embed(
+                texts=texts[i:i + 96],
+                model=self.model,
+                input_type=input_type,
+                embedding_types=["float"],
+            )
+            out.extend(list(e) for e in response.embeddings.float_)
+        return out
 
     async def _embed_local(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using a local sentence-transformers model."""
-        from sentence_transformers import SentenceTransformer
+        import asyncio
 
-        model = SentenceTransformer(self.model)
-        embeddings = model.encode(texts, normalize_embeddings=True)
+        model = _get_local_model(self.model)
+        # encode() is sync + CPU-bound; keep it off the event loop.
+        embeddings = await asyncio.to_thread(model.encode, texts, normalize_embeddings=True)
         return embeddings.tolist()

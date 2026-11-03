@@ -14,7 +14,7 @@ import logging
 from typing import List, Optional, Tuple
 
 from app.core.config import settings
-from app.core.llm_clients import openai_client
+from app.llm import get_llm
 from app.services.rag.retriever import HybridRetriever, RetrievedChunk
 
 logger = logging.getLogger(__name__)
@@ -63,21 +63,18 @@ class MultiHopRetriever:
     async def _next_query(self, query: str, chunks: List[RetrievedChunk]) -> Optional[str]:
         context = "\n\n".join(c.content[:500] for c in chunks) or "(nothing retrieved yet)"
         try:
-            client = openai_client()
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": _SYSTEM},
-                    {"role": "user", "content": f"Question: {query}\n\nContext so far:\n{context}"},
-                ],
+            response = await get_llm(self.model).complete(
+                [{"role": "user", "content": f"Question: {query}\n\nContext so far:\n{context}"}],
+                system=_SYSTEM,
                 temperature=0.0,
                 max_tokens=80,
+                effort="low",
             )
         except Exception:
             logger.warning("multi-hop follow-up generation failed; stopping hops", exc_info=True)
             return None
 
-        text = (response.choices[0].message.content or "").strip()
+        text = response.text.strip()
         if not text or text.upper().startswith(_SUFFICIENT):
             return None
         return text

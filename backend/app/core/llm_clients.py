@@ -1,7 +1,7 @@
-"""Factories for external API clients with consistent timeouts + retries (F11).
+"""Factories for vendor clients used outside the LLM port, with consistent timeouts + retries (F11).
 
-Every LLM / embedding / rerank call should construct its client here, so timeouts
-and bounded retries are applied uniformly instead of being forgotten per call site.
+Chat/completion calls go through ``app/llm`` (``get_llm``), not these. What remains here are
+non-chat APIs: OpenAI embeddings / Whisper / vision extraction, and Cohere embed + rerank.
 
 The OpenAI and Anthropic SDKs have built-in retry with exponential backoff + jitter
 that honors Retry-After when given ``max_retries`` — we use that rather than wrapping
@@ -23,22 +23,11 @@ def openai_client():
     )
 
 
-def anthropic_client():
-    import anthropic
-
-    return anthropic.AsyncAnthropic(
-        api_key=settings.anthropic_api_key,
-        timeout=settings.external_api_timeout_seconds,
-        max_retries=settings.external_api_max_retries,
-    )
-
-
 def cohere_client():
     import cohere
 
-    # cohere v4's AsyncClient accepts timeout + max_retries; the rerank call site
-    # also degrades gracefully if the client/call fails.
-    return cohere.AsyncClient(
+    # Cohere v2 client (embed + rerank). Call sites degrade gracefully if it fails.
+    return cohere.AsyncClientV2(
         api_key=settings.cohere_api_key,
         timeout=settings.external_api_timeout_seconds,
         max_retries=settings.external_api_max_retries,

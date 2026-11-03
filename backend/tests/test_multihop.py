@@ -1,10 +1,8 @@
 """Tests for multi-hop retrieval (A1)."""
 
-import types
-
 import pytest
 
-from app.services.rag import multihop as multihop_mod
+from app.llm import FakeLLM, use_llm
 from app.services.rag.multihop import MultiHopRetriever
 from app.services.rag.retriever import RetrievedChunk
 
@@ -24,35 +22,13 @@ class _FakeRetriever:
         return [_chunk(f"q{len(self.calls)}")]
 
 
-def _fake_llm(replies):
-    """openai_client() factory whose create() returns successive canned replies."""
-    state = {"i": 0}
-
-    class _Client:
-        @property
-        def chat(self):
-            return self
-
-        @property
-        def completions(self):
-            return self
-
-        async def create(self, **kwargs):
-            reply = replies[state["i"]]
-            state["i"] += 1
-            msg = types.SimpleNamespace(content=reply)
-            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
-
-    return lambda: _Client()
-
-
 @pytest.mark.asyncio
-async def test_multi_hop_follows_then_stops(monkeypatch):
+async def test_multi_hop_follows_then_stops():
     # hop 1 asks a follow-up, hop 2 says SUFFICIENT.
-    monkeypatch.setattr(multihop_mod, "openai_client", _fake_llm(["who manages her?", "SUFFICIENT"]))
     retriever = _FakeRetriever()
 
-    chunks, hops = await MultiHopRetriever(retriever).retrieve("q", max_hops=3)
+    with use_llm(FakeLLM(["who manages her?", "SUFFICIENT"])):
+        chunks, hops = await MultiHopRetriever(retriever).retrieve("q", max_hops=3)
 
     assert hops == ["who manages her?"]
     # initial query + one follow-up = 2 retrievals, accumulated + de-duplicated.
@@ -61,26 +37,23 @@ async def test_multi_hop_follows_then_stops(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_multi_hop_respects_max_hops(monkeypatch):
+async def test_multi_hop_respects_max_hops():
     # Always asks for more, but max_hops caps it.
-    monkeypatch.setattr(multihop_mod, "openai_client", _fake_llm(["more", "more", "more", "more"]))
     retriever = _FakeRetriever()
 
-    _, hops = await MultiHopRetriever(retriever).retrieve("q", max_hops=2)
+    with use_llm(FakeLLM("more")):
+        _, hops = await MultiHopRetriever(retriever).retrieve("q", max_hops=2)
 
     assert len(hops) == 2  # initial + 2 follow-ups = 3 retrievals
     assert len(retriever.calls) == 3
 
 
 @pytest.mark.asyncio
-async def test_multi_hop_stops_on_llm_error(monkeypatch):
-    def _boom():
-        raise RuntimeError("llm down")
-
-    monkeypatch.setattr(multihop_mod, "openai_client", _boom)
+async def test_multi_hop_stops_on_llm_error():
     retriever = _FakeRetriever()
 
-    chunks, hops = await MultiHopRetriever(retriever).retrieve("q", max_hops=3)
+    with use_llm(FakeLLM(RuntimeError("llm down"))):
+        chunks, hops = await MultiHopRetriever(retriever).retrieve("q", max_hops=3)
 
     # Failure in the reasoning step just ends hopping; the initial retrieval still stands.
     assert hops == []

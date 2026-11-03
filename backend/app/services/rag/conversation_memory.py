@@ -19,7 +19,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 from app.core.config import settings
-from app.core.llm_clients import openai_client
+from app.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -109,21 +109,15 @@ class ConversationMemory:
         transcript = "\n".join(
             f"{m.get('role', 'user')}: {m.get('content', '')}" for m in older
         )
-        client = openai_client()
-        response = await client.chat.completions.create(
-            model=self.summary_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Summarize the following conversation so a downstream assistant retains the "
-                        "key facts, entities, decisions, and unresolved questions. Be concise, write "
-                        "in the third person, and do not add information that is not present."
-                    ),
-                },
-                {"role": "user", "content": transcript},
-            ],
+        response = await get_llm(self.summary_model).complete(
+            [{"role": "user", "content": transcript}],
+            system=(
+                "Summarize the following conversation so a downstream assistant retains the "
+                "key facts, entities, decisions, and unresolved questions. Be concise, write "
+                "in the third person, and do not add information that is not present."
+            ),
             temperature=0,
             max_tokens=250,
+            effort="low",
         )
-        return response.choices[0].message.content.strip()
+        return response.text.strip()
