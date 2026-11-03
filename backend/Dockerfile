@@ -10,8 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # NVIDIA libraries). Install the CPU build first so the requirement is already satisfied; build
 # with --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128 for a GPU image.
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+# The base image's pip/setuptools lag behind security fixes (pip-audit flags them in CI too).
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install torch --index-url ${TORCH_INDEX_URL}
+    pip install --upgrade pip setuptools \
+    && pip install torch --index-url ${TORCH_INDEX_URL}
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
