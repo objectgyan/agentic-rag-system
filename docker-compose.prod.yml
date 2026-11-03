@@ -82,6 +82,8 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       MINIO_ENDPOINT: minio:9000
+    volumes:
+      - model-cache:/models   # local embedding/re-ranking models (HF_HOME, set in the Dockerfile)
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,6 +121,8 @@ services:
       # Worker metrics exporter (scraped internally; not published to the host).
       PROMETHEUS_MULTIPROC_DIR: /tmp/prom_multiproc
       WORKER_METRICS_PORT: "9100"
+    volumes:
+      - model-cache:/models
     depends_on:
       postgres:
         condition: service_healthy
@@ -171,6 +175,7 @@ services:
           memory: 256m
 
 volumes:
+  model-cache:
   pgdata:
   redisdata:
   miniodata:

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.access import assert_collection_accessible
 from app.api.deps.auth import get_current_user, require_member
 from app.core.audit import create_audit_log
-from app.core.config import TierLimits
+from app.core.config import TierLimits, settings
 from app.core.database import get_db
 from app.models.collection import Collection
 from app.models.document import Document
@@ -27,6 +27,17 @@ async def create_collection(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new document collection."""
+    # One embedding model per deployment: queries are embedded with it and the vector column is
+    # sized for it, so a collection on another model could never be searched correctly.
+    if req.embedding_model and req.embedding_model != settings.default_embedding_model:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"This deployment embeds with {settings.default_embedding_model!r}; per-collection "
+                "embedding models are not supported. Omit embedding_model."
+            ),
+        )
+
     # Check tier limits
     from app.models.tenant import Tenant
     tenant_result = await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))
@@ -47,7 +58,7 @@ async def create_collection(
         name=req.name,
         description=req.description,
         visibility=req.visibility,
-        embedding_model=req.embedding_model,
+        embedding_model=settings.default_embedding_model,
         chunk_strategy=req.chunk_strategy,
         chunk_size=str(req.chunk_size),
         chunk_overlap=str(req.chunk_overlap),

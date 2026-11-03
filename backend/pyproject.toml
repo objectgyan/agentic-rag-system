@@ -13,3 +13,7 @@ ignore = ["E501"]
 [tool.ruff.lint.per-file-ignores]
 # Tests intentionally use star-ish fixtures and local imports.
 "tests/*" = ["E402"]
+
+[tool.pytest.ini_options]
+# Explicit, so pytest-asyncio upgrades cannot silently change fixture event-loop scope.
+asyncio_default_fixture_loop_scope = "function"

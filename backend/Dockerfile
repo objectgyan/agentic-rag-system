@@ -14,7 +14,11 @@ COPY . .
 
 # Run as a non-root user (O4). Dependencies are already installed system-wide as root;
 # the app process itself needs no write access to the image.
-RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app \
+    && mkdir -p /models && chown appuser:appuser /models
+# HF_HOME: where local embedding/re-ranking models are cached. docker-compose mounts a named
+# volume here (initialized with this directory's ownership), so models download once.
+ENV HF_HOME=/models
 USER appuser
 
 EXPOSE 8000

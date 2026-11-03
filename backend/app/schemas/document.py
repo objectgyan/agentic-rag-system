@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DocumentUploadResponse(BaseModel):
@@ -14,8 +14,7 @@ class DocumentUploadResponse(BaseModel):
     status: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentResponse(BaseModel):
@@ -33,8 +32,7 @@ class DocumentResponse(BaseModel):
     created_at: datetime
     processed_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentURLIngest(BaseModel):

@@ -47,6 +47,13 @@ Production hardening (a separate `docker-compose.prod.yml`, and the Dockerfiles)
 - **No `--reload`** — dev uses uvicorn auto-reload; prod runs fixed workers.
 - **Healthchecks, restart policies, resource limits**, datastores kept off the host network.
 - **`.dockerignore`** so the image doesn't bloat with the local `venv`/`node_modules`.
+- **A `model-cache` volume** (`HF_HOME=/models`) shared by the backend and worker, so local
+  embedding / re-ranking models download once instead of on every container rebuild.
+
+**Operator tools** live in `backend/app/cli/` and run inside the backend container, e.g.
+`docker compose exec backend python -m app.cli.embeddings status` — compare the vector column
+with the configured embedding model, and `resize` / `reembed` when switching models
+([Building Block 4](blocks/04-retrieval-blocks.md)).
 
 ## Observability — you can't operate what you can't see
 
