@@ -30,7 +30,7 @@ _EXTRACT_PROMPT = (
 
 class GraphService:
     def __init__(self, model: Optional[str] = None):
-        self.model = model or settings.default_compression_model
+        self.model = model or settings.compression_model
 
     async def extract_triples(self, text: str) -> List[dict]:
         response = await get_llm(self.model).complete(

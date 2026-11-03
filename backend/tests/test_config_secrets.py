@@ -43,3 +43,10 @@ def test_production_rejects_default_minio_credentials():
 def test_production_boots_with_strong_secrets():
     s = Settings(app_env="production", jwt_secret=STRONG_JWT, **STRONG_MINIO)
     assert s.app_env == "production"
+
+
+def test_compression_model_follows_the_fast_model_unless_overridden():
+    # A Claude-only deployment must not send compression / summaries / graph calls to OpenAI.
+    assert Settings(default_fast_model="claude-haiku-4-5").compression_model == "claude-haiku-4-5"
+    s = Settings(default_fast_model="claude-haiku-4-5", default_compression_model="ollama:qwen3:4b")
+    assert s.compression_model == "ollama:qwen3:4b"
