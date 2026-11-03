@@ -150,6 +150,24 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @model_validator(mode="after")
+    def _embedding_dimensions_match_model(self):
+        """Fail at startup, not at the first upload, when the vector size can't be right.
+
+        ``chunks.embedding`` is a fixed-size column (see app/services/rag/vector_schema.py), so
+        the configured model must produce exactly DEFAULT_EMBEDDING_DIMENSIONS numbers.
+        """
+        from app.core.embedding_models import known_dimensions
+
+        expected = known_dimensions(self.default_embedding_model)
+        if expected is not None and expected != self.default_embedding_dimensions:
+            raise ValueError(
+                f"DEFAULT_EMBEDDING_MODEL={self.default_embedding_model!r} produces {expected}-dimensional "
+                f"vectors but DEFAULT_EMBEDDING_DIMENSIONS={self.default_embedding_dimensions}. "
+                f"Set DEFAULT_EMBEDDING_DIMENSIONS={expected}."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _reject_insecure_defaults_outside_dev(self):
         """Fail fast at startup if running outside development with default secrets.
 

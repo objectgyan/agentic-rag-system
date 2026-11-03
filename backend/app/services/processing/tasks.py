@@ -131,9 +131,18 @@ async def _run_processing(task, db, document_id: str, tenant_id: str):
 
         # Embed chunks
         from app.services.rag.embedder import EmbeddingService
-        embedder = EmbeddingService(model=collection.embedding_model)
+        # Always the deployment's model: queries are embedded with it, and the column is sized
+        # for it. (collection.embedding_model just records which model that was.)
+        embedder = EmbeddingService()
         texts = [c.content for c in text_chunks]
         embeddings = await embedder.embed_texts(texts)
+        expected = settings.default_embedding_dimensions
+        if embeddings and len(embeddings[0]) != expected:
+            raise ValueError(
+                f"embedding model {embedder.model!r} returned {len(embeddings[0])}-dimensional vectors, "
+                f"but DEFAULT_EMBEDDING_DIMENSIONS={expected}; fix the setting, then run "
+                "`python -m app.cli.embeddings status`"
+            )
 
         # Store chunks
         for tc, embedding in zip(text_chunks, embeddings):

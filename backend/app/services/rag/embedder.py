@@ -7,6 +7,7 @@ differently (``input_type`` / instruction prefixes). Mixing them up quietly lowe
 
 from typing import Dict, List, Optional
 
+from app.core import embedding_models
 from app.core.config import settings
 from app.core.llm_clients import cohere_client, openai_client
 
@@ -31,14 +32,7 @@ class EmbeddingService:
 
     @property
     def dimensions(self) -> int:
-        dim_map = {
-            "text-embedding-3-small": 1536,
-            "text-embedding-3-large": 3072,
-            "text-embedding-ada-002": 1536,
-            "embed-english-v3.0": 1024,
-            "embed-multilingual-v3.0": 1024,
-        }
-        return dim_map.get(self.model, settings.default_embedding_dimensions)
+        return embedding_models.known_dimensions(self.model) or settings.default_embedding_dimensions
 
     async def embed_texts(self, texts: List[str], input_type: str = "search_document") -> List[List[float]]:
         """Embed a batch of texts (documents by default; ``embed_query`` passes "search_query")."""
@@ -50,7 +44,7 @@ class EmbeddingService:
         elif self.model.startswith("embed-"):
             return await self._embed_cohere(texts, input_type)
         else:
-            return await self._embed_local(texts)
+            return await self._embed_local(texts, input_type)
 
     async def embed_query(self, query: str) -> List[float]:
         """Embed a single query, with a fail-soft Redis cache for repeated queries (item 5)."""
@@ -141,11 +135,15 @@ class EmbeddingService:
             out.extend(list(e) for e in response.embeddings.float_)
         return out
 
-    async def _embed_local(self, texts: List[str]) -> List[List[float]]:
+    async def _embed_local(self, texts: List[str], input_type: str = "search_document") -> List[List[float]]:
         """Generate embeddings using a local sentence-transformers model."""
         import asyncio
 
         model = _get_local_model(self.model)
+        query_prefix, doc_prefix = embedding_models.prefixes(self.model)
+        prefix = query_prefix if input_type == "search_query" else doc_prefix
+        if prefix:
+            texts = [prefix + t for t in texts]
         # encode() is sync + CPU-bound; keep it off the event loop.
         embeddings = await asyncio.to_thread(model.encode, texts, normalize_embeddings=True)
         return embeddings.tolist()

@@ -222,6 +222,13 @@ fell back to 0.5 on any non-bare-number reply; Claude models missing from the co
 
 ## Progress log
 
+- **2026-11-03** — **B1 follow-up: runs on an Anthropic key alone.** Configurable vector size
+  (startup validation, migration 007, `app.cli.embeddings` resize/reembed), local embedding
+  prefixes (BGE/E5), one embedding model per deployment (fixes collections ingested and searched
+  with different models), model-cache volume, deprecation warnings cleared. Live-checked on
+  Claude Opus 5.5 + `BAAI/bge-small-en-v1.5` + local cross-encoder; the Claude provider
+  smoke test passed 5/5. Suite 206 passed (11 new) + a live-DB resize/reembed test in CI.
+
 - **2026-11-03** — **B1 building-block core.** `app/llm` port + adapters + registry + fake;
   `stages.py` pipeline; native tool-calling orchestrator + `safe_math`; policy (`assert_model_allowed`)
   and metering (`record_usage`) on every billable route; deps upgraded; `docs/learn/blocks/` 01–05.

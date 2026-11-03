@@ -192,7 +192,9 @@ flowchart TB
 
 ### Prerequisites
 - Docker & Docker Compose
-- (Optional) OpenAI / Anthropic API key for LLM features
+- An LLM API key: Anthropic **or** OpenAI (or a self-hosted OpenAI-compatible model). With only an
+  Anthropic key, embeddings and re-ranking run on free local models — see the
+  "only an Anthropic key" profile in `.env.example`.
 
 ### 1. Clone & Configure
 
@@ -242,8 +244,12 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 | `JWT_SECRET` | (generated) | JWT signing secret |
 | `GOOGLE_CLIENT_ID` | — | Google OAuth2 |
 | `GITHUB_CLIENT_ID` | — | GitHub OAuth2 |
-| `DEFAULT_EMBEDDING_MODEL` | `text-embedding-3-small` | Default embeddings |
-| `DEFAULT_LLM_MODEL` | `gpt-4o` | Default LLM |
+| `DEFAULT_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model for the whole deployment (OpenAI, Cohere, or a local sentence-transformers model) |
+| `DEFAULT_EMBEDDING_DIMENSIONS` | `1536` | Must match the embedding model; sizes the vector column |
+| `DEFAULT_LLM_MODEL` | `gpt-4o` | Default LLM (any provider, e.g. `claude-opus-5-5`) |
+| `DEFAULT_FAST_MODEL` | `gpt-4o-mini` | Cheap model for helper calls (e.g. `claude-haiku-4-5`) |
+| `LOCAL_RERANKER_MODEL` | — | Free local cross-encoder re-ranker when no Cohere key |
+| `LLM_ENDPOINTS` | `{}` | Extra OpenAI-compatible endpoints (Azure, Ollama, vLLM, …) |
 | `MAX_UPLOAD_SIZE_MB` | `100` | Max file upload size |
 
 ### Tenant Tier Configuration
