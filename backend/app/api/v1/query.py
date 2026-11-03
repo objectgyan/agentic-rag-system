@@ -7,10 +7,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps.access import assert_collection_accessible, assert_collections_accessible
+from app.api.deps.access import (
+    assert_collection_accessible,
+    assert_collections_accessible,
+    assert_model_allowed,
+)
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db, set_tenant_context
 from app.core.metrics import (
@@ -31,6 +36,28 @@ from app.schemas.query import (
 from app.services.rag.pipeline import RAGPipeline
 
 router = APIRouter()
+
+
+def _pipeline_options(req: QueryRequest) -> dict:
+    """The QueryRequest fields that are pipeline options (see stages.QueryOptions)."""
+    return dict(
+        collection_ids=[str(c) for c in req.collection_ids] if req.collection_ids else None,
+        top_k=req.top_k,
+        model=req.model,
+        use_reranking=req.use_reranking,
+        use_hyde=req.use_hyde,
+        use_multi_query=req.use_multi_query,
+        temperature=req.temperature,
+        include_citations=req.include_citations,
+        evaluate=req.evaluate,
+        use_compression=req.use_compression,
+        use_multi_hop=req.use_multi_hop,
+        max_hops=req.max_hops,
+        use_graph=req.use_graph,
+        trace=req.trace,
+        use_routing=req.use_routing,
+        boosts=req.boosts,
+    )
 
 
 async def _load_conversation_history(db: AsyncSession, user: User, conversation_id):
@@ -92,8 +119,9 @@ async def query(
 ):
     """Execute a single RAG query (optionally within a conversation)."""
     start = time.time()
-    # Authorize the requested collections before retrieval touches them (F2).
+    # Authorize the requested collections and model before any work happens (F2).
     await assert_collections_accessible(db, user, req.collection_ids)
+    await assert_model_allowed(db, user, req.model)
 
     # If this query belongs to a conversation, load prior turns as history (C1).
     conversation = None
@@ -104,26 +132,7 @@ async def query(
     pipeline = RAGPipeline(db=db, tenant_id=str(user.tenant_id), user_id=str(user.id))
 
     try:
-        result = await pipeline.query(
-            query=req.query,
-            collection_ids=[str(c) for c in req.collection_ids] if req.collection_ids else None,
-            top_k=req.top_k,
-            model=req.model,
-            use_reranking=req.use_reranking,
-            use_hyde=req.use_hyde,
-            use_multi_query=req.use_multi_query,
-            temperature=req.temperature,
-            include_citations=req.include_citations,
-            conversation_history=history,
-            evaluate=req.evaluate,
-            use_compression=req.use_compression,
-            use_multi_hop=req.use_multi_hop,
-            max_hops=req.max_hops,
-            use_graph=req.use_graph,
-            trace=req.trace,
-            use_routing=req.use_routing,
-            boosts=req.boosts,
-        )
+        result = await pipeline.query(req.query, conversation_history=history, **_pipeline_options(req))
     except Exception:
         rag_queries_total.labels(status="error").inc()
         raise
@@ -153,6 +162,7 @@ async def query_stream(
     """Execute a RAG query with streaming response (SSE)."""
     # Authorize before the stream starts — a 403 mid-SSE-stream is hard for clients to handle.
     await assert_collections_accessible(db, user, req.collection_ids)
+    await assert_model_allowed(db, user, req.model)
 
     # Conversation memory for the streaming path too (C1): load history up front, and
     # persist both turns once the stream finishes.
@@ -166,15 +176,8 @@ async def query_stream(
     async def event_generator():
         full_answer = ""
         final_citations = None
-        async for chunk in pipeline.query_stream(
-            query=req.query,
-            collection_ids=[str(c) for c in req.collection_ids] if req.collection_ids else None,
-            top_k=req.top_k,
-            model=req.model,
-            use_reranking=req.use_reranking,
-            temperature=req.temperature,
-            conversation_history=history,
-        ):
+        # The streaming path runs the same stages as POST /query (HyDE, routing, boosts, ...).
+        async for chunk in pipeline.query_stream(req.query, conversation_history=history, **_pipeline_options(req)):
             if chunk.get("type") == "token":
                 full_answer += chunk.get("content", "")
             elif chunk.get("type") == "citations":
@@ -213,35 +216,37 @@ async def ws_chat(
 
     try:
         while True:
-            req = await websocket.receive_json()
-            query_text = (req.get("query") or "").strip()
-            if not query_text:
+            raw = await websocket.receive_json()
+            if not (raw.get("query") or "").strip():
                 continue
-
-            collection_ids = req.get("collection_ids")
+            # Validate frames with the same schema as POST /query, so the WS path supports (and
+            # bounds) exactly the same options.
             try:
-                await assert_collections_accessible(db, user, collection_ids)
+                req = QueryRequest.model_validate(raw)
+            except ValidationError as exc:
+                await websocket.send_json({"type": "error", "detail": exc.errors(include_url=False)})
+                continue
+            query_text = req.query.strip()
+
+            try:
+                await assert_collections_accessible(db, user, req.collection_ids)
+                await assert_model_allowed(db, user, req.model)
             except HTTPException as exc:
                 await websocket.send_json({"type": "error", "detail": exc.detail})
                 continue
 
             conversation = None
             history = None
-            if req.get("conversation_id"):
+            if req.conversation_id:
                 try:
-                    conversation, history = await _load_conversation_history(db, user, req["conversation_id"])
+                    conversation, history = await _load_conversation_history(db, user, req.conversation_id)
                 except HTTPException:
                     conversation, history = None, None
 
             full_answer = ""
             final_citations = None
             async for chunk in pipeline.query_stream(
-                query=query_text,
-                collection_ids=collection_ids,
-                top_k=req.get("top_k", 5),
-                model=req.get("model"),
-                use_reranking=req.get("use_reranking", True),
-                conversation_history=history,
+                query_text, conversation_history=history, **_pipeline_options(req)
             ):
                 if chunk.get("type") == "token":
                     full_answer += chunk.get("content", "")
@@ -251,7 +256,6 @@ async def ws_chat(
 
             if conversation is not None and full_answer:
                 await _persist_turn(db, user, conversation, query_text, full_answer, final_citations)
-            await websocket.send_json({"type": "done"})
     except WebSocketDisconnect:
         return
 

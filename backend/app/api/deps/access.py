@@ -57,3 +57,23 @@ async def assert_collections_accessible(db: AsyncSession, user: User, collection
         return
     for cid in dict.fromkeys(collection_ids):  # de-dupe, preserve order
         await assert_collection_accessible(db, user, cid)
+
+
+async def assert_model_allowed(db: AsyncSession, user: User, model) -> None:
+    """403 unless the tenant's tier permits the requested model (``TierLimits[...]["models"]``).
+
+    ``None`` (use the server default) is always allowed — the operator chose that model. The tier
+    is read from the DB rather than the JWT claim so an upgrade/downgrade applies immediately.
+    """
+    if model is None:
+        return
+    from app.core.config import TierLimits
+    from app.llm import model_allowed
+    from app.models.tenant import Tenant
+
+    tier = await db.scalar(select(Tenant.tier).where(Tenant.id == user.tenant_id))
+    if not model_allowed(TierLimits.get(tier or "free")["models"], model):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Model {model!r} is not available on the {tier or 'free'} tier",
+        )
