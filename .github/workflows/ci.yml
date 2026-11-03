@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       - run: helm lint --strict deploy/helm/agentrag
       # Render the default (emptyDir model cache) and the Claude-only + shared-PVC variants.
       - run: helm template ci deploy/helm/agentrag > /dev/null
