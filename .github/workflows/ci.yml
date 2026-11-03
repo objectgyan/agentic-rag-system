@@ -97,7 +97,7 @@ jobs:
       - run: pip install -r requirements.txt
       # Known-vulnerable Python dependencies (pins and everything they pull in) fail the build.
       - name: pip-audit (installed environment)
-        run: pip install --upgrade pip pip-audit && pip-audit --progress-spinner off
+        run: pip install --upgrade pip setuptools pip-audit && pip-audit --progress-spinner off
       - name: Run migrations (creates agentrag_app role + FORCE RLS)
         run: alembic upgrade head
       - name: Run tests
