@@ -1,26 +1,36 @@
-"""JWT token creation, verification, and password hashing."""
+"""JWT token creation, verification, and password hashing.
+
+PyJWT replaces python-jose (unmaintained, with open CVEs), and bcrypt is called directly instead
+of through passlib (unmaintained, and broken by bcrypt>=4). Existing password hashes and tokens
+remain valid: both are the same formats (bcrypt ``$2b$`` hashes, HS256 JWTs).
+"""
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
+import jwt
 
 from app.core.config import settings
 
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__ident="2b"  # Use modern bcrypt variant to avoid initialization issues
-)
+# bcrypt only reads the first 72 bytes. passlib truncated silently; bcrypt>=5 raises instead.
+# Truncating explicitly keeps every hash created under passlib verifiable.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _pw_bytes(password: str) -> bytes:
+    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(_pw_bytes(password), bcrypt.gensalt()).decode("ascii")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(_pw_bytes(plain), hashed.encode("ascii"))
+    except (ValueError, TypeError):  # malformed / non-bcrypt hash
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -43,5 +53,5 @@ def decode_token(token: str) -> Optional[dict]:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         return payload
-    except JWTError:
+    except jwt.PyJWTError:
         return None
