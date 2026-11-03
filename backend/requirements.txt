@@ -9,13 +9,13 @@ pydantic==2.14.2
 pydantic-settings==2.16.2
 
 # --- Data ---
-sqlalchemy[asyncio]==2.0.44
+sqlalchemy[asyncio]==2.1.6
 asyncpg==0.32.0
 psycopg2-binary==2.9.13
 pgvector==0.5.1
 alembic==1.20.1
 redis==8.1.0
-minio==7.2.3
+minio==7.2.20
 
 # --- Auth (PyJWT replaces the unmaintained python-jose; bcrypt is used directly, replacing passlib) ---
 PyJWT==2.15.1
@@ -38,8 +38,8 @@ pandas==2.2.0
 pypdf==6.21.4
 python-docx==1.2.0
 openpyxl==3.1.5
-beautifulsoup4==4.12.3
-pytesseract==0.3.10
+beautifulsoup4==4.15.0
+pytesseract==0.3.13
 Pillow==13.0.0
 pydub==0.25.1
 aiofiles==23.2.1
