@@ -5,8 +5,10 @@ import pytest
 from app.services.agents.tools import ToolRegistry
 
 
-def _registry(depth):
-    return ToolRegistry(db=None, tenant_id="t", retriever=None, user_id="u", depth=depth)
+def _registry(depth, collection_ids=None):
+    return ToolRegistry(
+        db=None, tenant_id="t", retriever=None, user_id="u", depth=depth, collection_ids=collection_ids
+    )
 
 
 def test_delegate_offered_at_top_depth_only():
@@ -35,18 +37,21 @@ async def test_delegate_runs_a_subagent_at_next_depth(monkeypatch):
         def __init__(self, db, tenant_id, user_id, depth):
             captured["depth"] = depth
 
-        async def execute(self, task, agent_type, max_steps):
+        async def execute(self, task, agent_type, max_steps, collection_ids=None):
             captured["task"] = task
             captured["agent_type"] = agent_type
+            captured["collection_ids"] = collection_ids
             return {"result": "sub-agent answer"}
 
     import app.services.agents.orchestrator as orch_mod
 
     monkeypatch.setattr(orch_mod, "AgentOrchestrator", _FakeOrchestrator)
 
-    out = await _registry(0)._tool_delegate({"agent_type": "analyst", "task": "analyze X"})
+    out = await _registry(0, collection_ids=["mine"])._tool_delegate({"agent_type": "analyst", "task": "analyze X"})
 
     assert out == "sub-agent answer"
     assert captured["depth"] == 1  # sub-agent runs one level deeper
     assert captured["task"] == "analyze X"
     assert captured["agent_type"] == "analyst"
+    # the sub-agent keeps the parent's authorized scope, so delegation can't widen retrieval
+    assert captured["collection_ids"] == ["mine"]

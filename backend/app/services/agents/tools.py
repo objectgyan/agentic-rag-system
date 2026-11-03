@@ -5,7 +5,8 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.llm_clients import openai_client
+from app.llm import ToolSpec, get_fast_llm
+from app.services.agents.safe_math import SafeMathError, evaluate_expression
 from app.services.rag.retriever import HybridRetriever
 
 
@@ -18,30 +19,68 @@ class ToolRegistry:
     TOOLS: List[dict] = [
         {
             "name": "retrieval",
-            "description": "Search through document collections. Input: {\"query\": \"search terms\", \"top_k\": 5}",
+            "description": "Search the user's document collections and return the most relevant passages, "
+            "numbered [Source N]. Use this first for any question about the user's documents.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What to search for."},
+                    "top_k": {"type": "integer", "description": "How many passages to return (1-20).", "default": 5},
+                },
+                "required": ["query"],
+            },
         },
         {
             "name": "calculator",
-            "description": "Evaluate mathematical expressions. Input: {\"expression\": \"2 + 2\"}",
+            "description": "Evaluate an arithmetic expression exactly (+ - * / // % **, parentheses, and math "
+            "functions such as sqrt, log, sin). Use it instead of doing arithmetic in your head.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"expression": {"type": "string", "description": "e.g. \"(17.5 * 3) / sqrt(2)\""}},
+                "required": ["expression"],
+            },
         },
         {
             "name": "web_search",
-            "description": "Search the web for current information. Input: {\"query\": \"search terms\"}",
+            "description": "Search the public web for current information not in the user's documents.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
         },
         {
             "name": "summarize",
-            "description": "Summarize a long text. Input: {\"text\": \"long text here\", \"max_length\": 200}",
+            "description": "Summarize a long text to roughly max_length words.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "max_length": {"type": "integer", "default": 200},
+                },
+                "required": ["text"],
+            },
         },
         {
             "name": "compare",
-            "description": "Compare two pieces of text or data. Input: {\"text_a\": \"...\", \"text_b\": \"...\"}",
+            "description": "Compare two pieces of text or data: similarities, differences, key insights.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"text_a": {"type": "string"}, "text_b": {"type": "string"}},
+                "required": ["text_a", "text_b"],
+            },
         },
         {
             "name": "delegate",
-            "description": (
-                "Hand a focused sub-task to a specialized sub-agent and get its answer back. "
-                "Input: {\"agent_type\": \"research|analyst|summarizer|code\", \"task\": \"the sub-task\"}"
-            ),
+            "description": "Hand a focused sub-task to a specialized sub-agent and get its answer back.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "agent_type": {"type": "string", "enum": ["research", "analyst", "summarizer", "code"]},
+                    "task": {"type": "string", "description": "The self-contained sub-task."},
+                },
+                "required": ["task"],
+            },
         },
     ]
 
@@ -56,8 +95,10 @@ class ToolRegistry:
         retriever: HybridRetriever,
         user_id: Optional[str] = None,
         depth: int = 0,
+        collection_ids: Optional[List[str]] = None,
     ):
         self.db = db
+        self.collection_ids = collection_ids
         self.tenant_id = tenant_id
         self.retriever = retriever
         self.user_id = user_id
@@ -82,6 +123,10 @@ class ToolRegistry:
     @classmethod
     def available_tool_names(cls) -> List[str]:
         return [t["name"] for t in cls.available_tools()]
+
+    def tool_specs(self, tool_names: Optional[List[str]] = None) -> List[ToolSpec]:
+        """The available tools as provider-neutral specs for native tool calling."""
+        return [ToolSpec(t["name"], t["description"], t["input_schema"]) for t in self.get_tools(tool_names)]
 
     def get_tools(self, tool_names: Optional[List[str]] = None, collection_ids: Optional[List[str]] = None) -> List[dict]:
         """Get available (config-enabled, depth-aware) tool descriptions."""
@@ -116,11 +161,11 @@ class ToolRegistry:
     async def _tool_retrieval(self, params: dict) -> str:
         """Search documents using RAG retrieval."""
         query = params.get("query", params.get("input", ""))
-        top_k = params.get("top_k", 5)
-        collection_ids = params.get("collection_ids")
-
+        top_k = max(1, min(int(params.get("top_k", 5) or 5), 20))
+        # Scope comes from the authorized request, never from the model's arguments — otherwise
+        # injected text could point the agent at collections the user may not access.
         chunks = await self.retriever.retrieve(
-            query=query, collection_ids=collection_ids, top_k=top_k
+            query=query, collection_ids=self.collection_ids, top_k=top_k
         )
 
         if not chunks:
@@ -138,18 +183,16 @@ class ToolRegistry:
         return "\n\n".join(results)
 
     async def _tool_calculator(self, params: dict) -> str:
-        """Safely evaluate mathematical expressions."""
-        expression = params.get("expression", "")
-        try:
-            # Safe eval using restricted builtins
-            allowed = {"__builtins__": {}}
-            import math
-            allowed.update({k: getattr(math, k) for k in dir(math) if not k.startswith("_")})
-            result = eval(expression, allowed)
-            return str(result)
-        except Exception as e:
-            return f"Calculation error: {str(e)}"
+        """Evaluate arithmetic via an AST whitelist — never ``eval``.
 
+        Agent inputs are model-generated, and the model reads retrieved documents, so a poisoned
+        document can steer what reaches this tool (prompt injection). ``eval`` with empty
+        builtins is escapable (``().__class__.__mro__...``); the AST evaluator cannot run code.
+        """
+        try:
+            return str(evaluate_expression(str(params.get("expression", ""))))
+        except SafeMathError as e:
+            return f"Calculation error: {e}"
     async def _tool_web_search(self, params: dict) -> str:
         """Web search via Tavily when configured; honest about it when not (C4)."""
         query = params.get("query", "")
@@ -186,40 +229,30 @@ class ToolRegistry:
         return f"Web results for '{query}':\n" + "\n".join(lines)
 
     async def _tool_summarize(self, params: dict) -> str:
-        """Summarize text using LLM."""
+        """Summarize text using the helper model."""
         text = params.get("text", "")
         max_length = params.get("max_length", 200)
-
-        client = openai_client()
-
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": f"Summarize the following text in about {max_length} words."},
-                {"role": "user", "content": text[:5000]},
-            ],
+        resp = await get_fast_llm().complete(
+            [{"role": "user", "content": text[:5000]}],
+            system=f"Summarize the following text in about {max_length} words.",
             temperature=0.3,
             max_tokens=500,
+            effort="low",
         )
-        return response.choices[0].message.content
+        return resp.text
 
     async def _tool_compare(self, params: dict) -> str:
-        """Compare two texts using LLM."""
+        """Compare two texts using the helper model."""
         text_a = params.get("text_a", "")
         text_b = params.get("text_b", "")
-
-        client = openai_client()
-
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Compare the two texts. Highlight similarities, differences, and key insights."},
-                {"role": "user", "content": f"Text A:\n{text_a[:2000]}\n\nText B:\n{text_b[:2000]}"},
-            ],
+        resp = await get_fast_llm().complete(
+            [{"role": "user", "content": f"Text A:\n{text_a[:2000]}\n\nText B:\n{text_b[:2000]}"}],
+            system="Compare the two texts. Highlight similarities, differences, and key insights.",
             temperature=0.3,
             max_tokens=500,
+            effort="low",
         )
-        return response.choices[0].message.content
+        return resp.text
 
     async def _tool_delegate(self, params: dict) -> str:
         """Run a focused sub-task on a fresh sub-agent and return its answer (A4).
@@ -241,5 +274,9 @@ class ToolRegistry:
         sub_agent = AgentOrchestrator(
             db=self.db, tenant_id=self.tenant_id, user_id=self.user_id, depth=self.depth + 1
         )
-        result = await sub_agent.execute(task=task, agent_type=agent_type, max_steps=5)
+        # The sub-agent inherits the parent's authorized collection scope; without it, its
+        # retrieval would search the whole tenant.
+        result = await sub_agent.execute(
+            task=task, agent_type=agent_type, max_steps=5, collection_ids=self.collection_ids
+        )
         return result.get("result", "")
