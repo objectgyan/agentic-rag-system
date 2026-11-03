@@ -7,13 +7,14 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps.access import assert_collections_accessible
+from app.api.deps.access import assert_collections_accessible, assert_model_allowed
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.agent import AgentExecuteRequest, AgentExecuteResponse
 from app.services.agents.orchestrator import AgentOrchestrator
 from app.services.agents.tools import ToolRegistry
+from app.services.usage import record_usage
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ async def execute_agent(
     """Execute an agent task with full trace."""
     start = time.time()
     await assert_collections_accessible(db, user, req.collection_ids)
+    await assert_model_allowed(db, user, req.model)
     orchestrator = AgentOrchestrator(
         db=db,
         tenant_id=str(user.tenant_id),
@@ -41,6 +43,17 @@ async def execute_agent(
         tools=req.tools,
     )
     result["execution_time_ms"] = (time.time() - start) * 1000
+    await record_usage(
+        db,
+        tenant_id=str(user.tenant_id),
+        user_id=str(user.id),
+        resource_type="agent",
+        model=result["model_used"],
+        tokens=result["total_tokens"],
+        prompt_tokens=result["prompt_tokens"],
+        completion_tokens=result["completion_tokens"],
+    )
+    await db.commit()
     return AgentExecuteResponse(**result)
 
 
@@ -52,6 +65,7 @@ async def stream_agent(
 ):
     """Stream agent execution with step-by-step updates."""
     await assert_collections_accessible(db, user, req.collection_ids)
+    await assert_model_allowed(db, user, req.model)
     orchestrator = AgentOrchestrator(
         db=db,
         tenant_id=str(user.tenant_id),
@@ -59,14 +73,28 @@ async def stream_agent(
     )
 
     async def event_generator():
+        usage: dict = {}
         async for step in orchestrator.execute_stream(
             task=req.task,
             agent_type=req.agent_type,
             collection_ids=[str(c) for c in req.collection_ids] if req.collection_ids else None,
             model=req.model,
             max_steps=req.max_steps,
+            tools=req.tools,
         ):
-            yield f"data: {json.dumps(step)}\n\n"
+            usage = step if "tokens" in step else usage
+            yield f"data: {json.dumps(step, default=str)}\n\n"
+        await record_usage(
+            db,
+            tenant_id=str(user.tenant_id),
+            user_id=str(user.id),
+            resource_type="agent",
+            model=req.model,
+            tokens=usage.get("tokens"),
+            prompt_tokens=usage.get("input_tokens"),
+            completion_tokens=usage.get("output_tokens"),
+        )
+        await db.commit()
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
