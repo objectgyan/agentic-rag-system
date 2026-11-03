@@ -16,7 +16,7 @@ from dataclasses import replace
 from typing import List, Optional
 
 from app.core.config import settings
-from app.core.llm_clients import openai_client
+from app.llm import get_llm
 from app.services.rag.retriever import RetrievedChunk
 
 logger = logging.getLogger(__name__)
@@ -57,17 +57,14 @@ class ContextualCompressor:
         return compressed
 
     async def _compress_one(self, query: str, chunk: RetrievedChunk) -> Optional[RetrievedChunk]:
-        client = openai_client()
-        response = await client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": f"Question: {query}\n\nPassage:\n{chunk.content}"},
-            ],
+        response = await get_llm(self.model).complete(
+            [{"role": "user", "content": f"Question: {query}\n\nPassage:\n{chunk.content}"}],
+            system=_SYSTEM_PROMPT,
             temperature=0.0,
             max_tokens=500,
+            effort="low",
         )
-        text = (response.choices[0].message.content or "").strip()
+        text = response.text.strip()
         if not text or text.upper().startswith(_IRRELEVANT):
             return None
         return replace(chunk, content=text)

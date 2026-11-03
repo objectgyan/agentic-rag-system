@@ -1,15 +1,17 @@
 """Application configuration loaded from environment variables."""
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import model_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_JWT_SECRET = "change-me-to-a-long-random-string"
 MIN_JWT_SECRET_LEN = 32
 
 
 class TierLimits:
+    # `models` is enforced on every query/agent request (app/api/deps/access.py). Entries are
+    # exact model names, provider wildcards like "ollama:*", or "*" for everything.
     TIERS = {
         "free": {
             "requests_per_minute": 10,
@@ -17,7 +19,7 @@ class TierLimits:
             "storage_gb": 1,
             "max_collections": 5,
             "concurrent_queries": 2,
-            "models": ["gpt-4o-mini"],
+            "models": ["gpt-4o-mini", "claude-haiku-4-5"],
         },
         "pro": {
             "requests_per_minute": 60,
@@ -25,7 +27,9 @@ class TierLimits:
             "storage_gb": 50,
             "max_collections": 50,
             "concurrent_queries": 10,
-            "models": ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet-20241022"],
+            "models": [
+                "gpt-4o", "gpt-4o-mini", "claude-haiku-4-5", "claude-sonnet-5-5", "claude-opus-5-5",
+            ],
         },
         "enterprise": {
             "requests_per_minute": 300,
@@ -99,10 +103,23 @@ class Settings(BaseSettings):
     external_api_timeout_seconds: float = 30.0
     external_api_max_retries: int = 3
 
-    # Model defaults
+    # Model defaults. LLM model strings may be bare ("gpt-4o", "claude-opus-5-5") or
+    # provider-qualified ("anthropic:claude-opus-5-5", "ollama:llama3.1:8b") — see app/llm/registry.py.
     default_embedding_model: str = "text-embedding-3-small"
     default_embedding_dimensions: int = 1536
     default_llm_model: str = "gpt-4o"
+    # Cheap model for helper calls: HyDE / multi-query rewrites, multi-hop follow-ups, the
+    # LLM-as-judge evaluator, agent summarize/compare tools. With Claude: "claude-haiku-4-5".
+    default_fast_model: str = "gpt-4o-mini"
+    # Output cap for answers. Generous on purpose — hitting the cap truncates mid-sentence, and
+    # on thinking models the cap also covers thinking tokens.
+    llm_max_output_tokens: int = 16000
+    # Extra OpenAI-compatible (or Anthropic-compatible, "kind": "anthropic") providers by name,
+    # as JSON. e.g. {"ollama": {"base_url": "http://ollama:11434/v1"}}. See app/llm/registry.py.
+    llm_endpoints: Dict[str, Dict[str, Any]] = {}
+    # Opt Claude requests into the server-side refusal fallback (fallbacks="default"): a request a
+    # safety classifier declines is re-run on Anthropic's recommended fallback model in-call.
+    anthropic_refusal_fallback: bool = True
     default_reranker_model: str = "rerank-english-v3.0"
     # Optional local cross-encoder (sentence-transformers) used for re-ranking when no
     # Cohere key is set, e.g. "cross-encoder/ms-marco-MiniLM-L-6-v2". Heavy (pulls torch).
@@ -159,9 +176,7 @@ class Settings(BaseSettings):
             )
         return self
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()

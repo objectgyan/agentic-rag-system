@@ -27,6 +27,15 @@ MODEL_PRICING: Dict[str, tuple] = {
     "gpt-4.1-mini": (0.40, 1.60),
     "text-embedding-3-small": (0.02, 0.0),
     "text-embedding-3-large": (0.13, 0.0),
+    # Claude (first-party API list prices, 2026-09). Cache reads bill at ~10% of input.
+    "claude-fable-5-1": (10.00, 50.00),
+    "claude-opus-5-5": (4.00, 20.00),
+    "claude-opus-5": (5.00, 25.00),
+    "claude-opus-4-8": (5.00, 25.00),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-haiku-4-5": (1.00, 5.00),
     "claude-3-5-haiku": (0.80, 4.00),
     "claude-3-5-sonnet": (3.00, 15.00),
     "claude-3-opus": (15.00, 75.00),
@@ -36,13 +45,16 @@ MODEL_PRICING: Dict[str, tuple] = {
 def _lookup_price(model: str) -> tuple:
     if not model:
         return (0.0, 0.0)
+    # "anthropic:claude-opus-5-5" -> "claude-opus-5-5"; self-hosted models fall through to 0.0.
+    from app.llm.registry import resolve
+
+    model = resolve(model)[1]
     if model in MODEL_PRICING:
         return MODEL_PRICING[model]
-    # Prefix match so dated ids resolve (e.g. "claude-3-5-sonnet-20241022" -> "claude-3-5-sonnet").
-    for key, price in MODEL_PRICING.items():
-        if model.startswith(key):
-            return price
-    return (0.0, 0.0)
+    # Longest-prefix match so dated ids resolve ("claude-3-5-sonnet-20241022" -> "claude-3-5-sonnet")
+    # without a shorter key shadowing a longer one ("claude-opus-5" vs "claude-opus-5-5").
+    matches = [key for key in MODEL_PRICING if model.startswith(key)]
+    return MODEL_PRICING[max(matches, key=len)] if matches else (0.0, 0.0)
 
 
 def estimate_cost(model: str, prompt_tokens: int = 0, completion_tokens: int = 0) -> float:

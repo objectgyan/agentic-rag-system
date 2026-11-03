@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.llm_clients import openai_client
+from app.llm import get_llm
 from app.models.graph import GraphEdge
 
 logger = logging.getLogger(__name__)
@@ -33,17 +33,14 @@ class GraphService:
         self.model = model or settings.default_compression_model
 
     async def extract_triples(self, text: str) -> List[dict]:
-        client = openai_client()
-        response = await client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": _EXTRACT_PROMPT},
-                {"role": "user", "content": text[:6000]},
-            ],
+        response = await get_llm(self.model).complete(
+            [{"role": "user", "content": text[:6000]}],
+            system=_EXTRACT_PROMPT,
             temperature=0.0,
             max_tokens=1000,
+            effort="low",
         )
-        return self._parse((response.choices[0].message.content or "").strip())
+        return self._parse(response.text.strip())
 
     @staticmethod
     def _parse(raw: str) -> List[dict]:
