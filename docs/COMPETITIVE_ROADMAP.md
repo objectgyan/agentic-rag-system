@@ -32,7 +32,7 @@ making the product *good* and *yours*.
 | Conversation context mgmt | 🟢 Addressed | Item ② done: recent window + token budget + running summary of older turns (`conversation_memory.py`). Semantic-memory retrieval still a stretch. |
 | Observability / tracing | 🟢 Addressed | Item ③ done: per-query `QueryTrace` (stage latencies, chunk ids+scores, tokens, cost) on `trace=true` + logged every query; cost persisted to `UsageRecord`. OTel export still a stretch. |
 | Scale (vectors / sparse / cache) | 🟢 Addressed | Item ⑤ done: HNSW ANN index verified; query **embedding cache** (Redis); **sparse search moved in-DB** — `content_tsv` generated column + GIN index + `ts_rank` (migration 006), replacing the in-Python BM25 that loaded ≤1000 rows. Eval-gated: recall@k/MRR/nDCG unchanged. |
-| **Prompt-injection / output safety** | 🔴 **Gap** | RAG is a huge injection surface; no guardrail/moderation/PII layer. |
+| **Prompt-injection / output safety** | 🟡 **Partial** | Agent tools hardened (no `eval`, scope from the request, tool output treated as data). Screening of retrieved text, PII, and moderation are milestone B2. |
 | Caching | 🟢 Addressed | Query **embedding cache** in Redis (item ⑤), fail-soft. Semantic *answer* cache still a future win. |
 
 🟢 = competitive · 🟡 = works but limited · 🔴 = missing, and it matters
@@ -199,7 +199,33 @@ fully in place.
 
 ---
 
+## Phase 2 roadmap — building blocks, safety, quality, integrations (started 2026-11-03)
+
+The competitive phase made the product *measurable, customizable, debuggable*. The next phase
+makes it **reusable** — every component a block (port + adapters + composition + fake) that can be
+lifted into a client project — and closes the remaining 🔴 rows. Docs: [`learn/blocks/`](learn/blocks/README.md).
+
+| # | Milestone | Status |
+|---|---|---|
+| B1 | **Building-block core** — LLM port (`app/llm`: Anthropic, OpenAI, any OpenAI-compatible endpoint, `FakeLLM`), pipeline as stages (streaming == blocking), native tool-calling agents, dependency upgrades (anthropic 2.x, openai 3.x, FastAPI 0.16x, PyJWT, bcrypt), tier model policy + metering for streams/agents | ✅ this phase |
+| B2 | **Safety & trust** — `Guardrail` stages: prompt-injection screening of retrieved text, PII redaction, citation-grounding verification, output moderation | next |
+| B3 | **Retrieval quality** — contextual retrieval, layout/table-aware parsing, agentic retrieval; every change eval-gated | planned |
+| B4 | **Integrations** — the pipeline as an MCP server, OTel/Langfuse export, data connectors (Drive, SharePoint, Notion) | planned |
+
+Bugs found and fixed while building B1 (each has a regression test): streaming path skipped most
+pipeline features and was never billed; agent runs never billed; tier model allowlists never
+enforced; Claude calls sent sampling params (400 on current models) and read `content[0]` (breaks
+on thinking blocks); helper calls (HyDE, judge) sent Claude model names to the OpenAI client;
+agent calculator used escapable `eval`; agent retrieval accepted model-chosen `collection_ids`;
+local embedding model reloaded on every call; Cohere queries embedded as documents; judge scores
+fell back to 0.5 on any non-bare-number reply; Claude models missing from the cost table.
+
 ## Progress log
+
+- **2026-11-03** — **B1 building-block core.** `app/llm` port + adapters + registry + fake;
+  `stages.py` pipeline; native tool-calling orchestrator + `safe_math`; policy (`assert_model_allowed`)
+  and metering (`record_usage`) on every billable route; deps upgraded; `docs/learn/blocks/` 01–05.
+  Suite 195 passed (48 new), ruff clean.
 
 - **2026-07-05** — Roadmap captured. Built ① eval harness: `app/services/rag/evaluation/`
   (`metrics`, `dataset`, `runner`, CLI) + `tests/test_eval_metrics.py`. Unit tests green in-container

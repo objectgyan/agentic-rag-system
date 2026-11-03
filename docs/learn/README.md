@@ -25,7 +25,7 @@ you can read the actual code alongside the explanation.
 | 04 | [Authentication & authorization](05-auth.md) | JWTs, refresh tokens, API keys, RBAC, password hashing |
 | 05 | [Data, the ORM & vectors](06-data-and-vectors.md) | Postgres, SQLAlchemy, async DB access, `pgvector`, embeddings, migrations |
 | 06 | [The RAG pipeline](07-rag-pipeline.md) | Chunking, embeddings, hybrid search, re-ranking, multi-hop, compression, knowledge graph, generation |
-| 07 | [The agent system](08-agents.md) | The ReAct loop, tools, and multi-agent delegation |
+| 07 | [The agent system](08-agents.md) | The tool-calling agent loop, tools, and multi-agent delegation |
 | 08 | [Async ingestion](09-async-ingestion.md) | Celery, Redis, background workers, retries |
 | 09 | [The frontend](10-frontend.md) | React, Vite, Zustand, TanStack Query, streaming over SSE/WebSocket |
 | 10 | [Ops, Docker & deploy](11-ops-and-deploy.md) | Containers, compose, CI, metrics, logging, Helm |
@@ -33,6 +33,7 @@ you can read the actual code alongside the explanation.
 | 12 | [The RAG glossary](13-rag-glossary.md) | **Talk the AI language** — every term (dense/sparse/hybrid, BM25, RRF, cross-encoder, chunking strategies, HyDE, faithfulness…) with its repo pointer |
 | 13 | [A query, traced end-to-end](14-query-trace.md) | One real question followed through every hop, naming the tech at each step |
 | 14 | [Measuring quality (evaluation)](15-evaluation.md) | The eval harness: golden sets, recall@k / MRR / nDCG, faithfulness, LLM-as-judge, regression gating |
+| 15 | [**Building blocks**](blocks/README.md) | Each component as a reusable block — port, adapters, composition, fake — with "swap it for a client" recipes |
 
 ## The 60-second mental model
 

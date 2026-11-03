@@ -96,7 +96,7 @@ backend/
     schemas/           # Pydantic request/response models (DTOs)
     services/
       rag/             # the RAG pipeline: chunker, embedder, retriever, generator, ...
-      agents/          # the ReAct agent orchestrator + tools
+      agents/          # the tool-calling agent orchestrator + tools
       processing/      # the Celery tasks + file extractors
   migrations/          # Alembic schema versions
   tests/               # pytest tests

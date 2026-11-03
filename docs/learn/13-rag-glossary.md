@@ -168,8 +168,9 @@ intent labels (`argmax` instead of top-k). → *not built yet*; it's roadmap ite
 
 ## 7. Generation & citations
 
-**LLM (Large Language Model)** — the model that writes the final answer (`gpt-4o-mini` here). Chosen
-by name string — `startswith("claude")` → Anthropic, else OpenAI. → `generator.py`.
+**LLM (Large Language Model)** — the model that writes the final answer (`gpt-4o` by default; any
+Claude, OpenAI, or OpenAI-compatible model via config). Reached through the `LLMProvider` port →
+`app/llm/`, `generator.py`.
 
 **Prompt** — the assembled input: system instructions + retrieved context + the question. **System
 prompt** — the standing instructions ("answer only from context, cite `[Source N]`").
@@ -200,8 +201,8 @@ question. Answers questions from *relationships* no single chunk states. → `gr
 table.
 
 **ReAct** — the agent loop pattern: **Reason** (Thought) → **Act** (call a tool) → observe → repeat
-until a Final Answer. This repo parses it from text rather than using native tool-calling. →
-`orchestrator.py`. **Tool** — a capability the agent can invoke (search, web, delegate). →
+until a Final Answer. This repo now implements the idea with **native tool calling** (structured
+tool calls with JSON Schemas) rather than parsing text. → `orchestrator.py`. **Tool** — a capability the agent can invoke (search, web, delegate). →
 `tools.py`.
 
 ---

@@ -31,7 +31,7 @@ injects and when the session closes.
 ## Stage 2 — Auth (1 day)
 
 **Goal:** users, login, protected routes.
-- `pip install "python-jose[cryptography]" "passlib[bcrypt]"`.
+- `pip install PyJWT bcrypt` (avoid `python-jose` and `passlib` — both are unmaintained).
 - `User` model with a bcrypt password hash. `POST /auth/register`, `POST /auth/login` returning a
   JWT.
 - A `get_current_user` dependency that validates the JWT and loads the user. Protect a route.
@@ -91,8 +91,9 @@ graceful fallback:
 ## Stage 7 — Agents (2 days)
 
 **Goal:** multi-step tool use.
-- A `ToolRegistry` (retrieval, calculator, ...). A ReAct loop that prompts the LLM, parses
-  `Action`, runs the tool, feeds back the `Observation`.
+- A `ToolRegistry` (retrieval, calculator, ...) where each tool has a JSON Schema. A native
+  tool-calling loop: call the LLM with the tools, run any tool calls it returns, feed the results
+  back, stop when it answers without tool calls. Never `eval` model output (see blocks/03).
 - Add `delegate` with a depth cap.
 
 ## Stage 8 — Frontend (2-3 days)

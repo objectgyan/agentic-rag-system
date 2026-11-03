@@ -169,12 +169,15 @@ step: we parse the answer for `[Source N]` markers and **return only the citatio
 actually used** (`_extract_cited_sources`). So the "Sources" list reflects what truly grounded
 the answer, not just everything retrieved.
 
-### Provider routing (no abstraction layer)
+### Provider routing — the LLM port
 
-There's no `ILlmProvider` interface — the code simply branches on the model name string:
-`model.startswith("claude")` → Anthropic SDK, else OpenAI SDK. Every external call goes through
-a small client factory (`core/llm_clients.py`) that sets a timeout and bounded retries, so a
-slow/flaky provider fails fast instead of hanging a request.
+Every chat-model call goes through one interface, `LLMProvider` (`app/llm/`) — the
+`ILlmProvider` a .NET developer would expect. `get_llm(model)` resolves the model string
+(`claude-*` → Anthropic, `ollama:llama3.1:8b` → a configured OpenAI-compatible endpoint, else
+OpenAI) and returns an adapter with a configured timeout and bounded retries, so a slow/flaky
+provider fails fast instead of hanging a request. See
+[Building Block 1 — the LLM provider](blocks/01-llm-provider.md). The query steps themselves are
+composable stages — see [Building Block 2](blocks/02-pipeline-stages.md).
 
 ### Optional self-evaluation — `evaluator.py`
 
