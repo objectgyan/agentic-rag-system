@@ -1,4 +1,4 @@
-# 🚀 AgentRAG — Production-Ready Agentic RAG-as-a-Service
+# AgentRAG — Multi-Tenant Agentic RAG Reference Implementation
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-green.svg)](https://python.org)
@@ -6,7 +6,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://docker.com)
 
-> **Enterprise-grade, multi-tenant Agentic RAG platform** with multi-modal ingestion, advanced retrieval strategies, agentic AI orchestration, and a beautiful React UI.
+> A multi-tenant agentic RAG platform I built to work through production RAG concerns end to end: Postgres row-level security for tenant isolation, hybrid retrieval, evaluation, and agent orchestration. Built with Claude Code as a pair programmer; the architecture and multi-tenancy design are mine. It runs locally and in Docker and hasn't yet been used in production by real users.
 
 > 📚 **New to the stack?** The [**Learning Guide**](docs/learn/README.md) explains every component
 > from scratch (assuming a .NET background, not Python), with diagrams and a rebuild-it-yourself path.
@@ -19,7 +19,6 @@
 
 - [Features](#-features)
 - [Architecture](#-architecture)
-- [Feature Comparison](#-feature-comparison)
 - [Quick Start](#-quick-start)
 - [Configuration](#-configuration)
 - [API Reference](#-api-reference)
@@ -74,7 +73,7 @@
 - **Audit Logging**: Comprehensive audit trail for all administrative actions (user creation, login, document uploads, collection creation, tier changes)
 - **Tier Management**: Visual interface for upgrading/downgrading tenant tiers with real-time feature comparison
 
-### Production Ready
+### Operational Features
 - **Streaming**: SSE real-time responses + a WebSocket chat endpoint (`/api/v1/query/ws/chat`)
 - **Rate Limiting**: Tier-based (Free/Pro/Enterprise) with Redis, plus IP-keyed limits on auth
 - **Async Processing**: Celery workers for document ingestion
@@ -162,32 +161,6 @@ flowchart TB
 
 ---
 
-## 📊 Feature Comparison
-
-| Feature | AgentRAG | Progress RAG | LangChain | LlamaIndex |
-|---------|----------|-------------|-----------|------------|
-| Multi-modal ingestion | ✅ All types | ✅ Limited | ⚠️ Plugin | ⚠️ Plugin |
-| Agentic AI orchestration | ✅ Multi-agent | ✅ Basic | ✅ Chains | ⚠️ Basic |
-| Multi-tenancy + RLS | ✅ Native | ✅ | ❌ | ❌ |
-| User-level privacy | ✅ | ❌ | ❌ | ❌ |
-| Hybrid search (dense+sparse) | ✅ | ✅ | ⚠️ Manual | ⚠️ Manual |
-| Knowledge graphs | ✅ | ❌ | ⚠️ Plugin | ✅ |
-| Re-ranking | ✅ Multi-model | ✅ | ⚠️ Manual | ✅ |
-| HyDE + multi-query | ✅ | ❌ | ⚠️ Manual | ✅ |
-| Parent-child chunking | ✅ | ❌ | ❌ | ✅ |
-| Built-in eval metrics | ✅ | ❌ | ❌ | ❌ |
-| Streaming (SSE+WS) | ✅ | ✅ | ⚠️ Basic | ⚠️ Basic |
-| Tiered rate limiting | ✅ | ✅ | ❌ | ❌ |
-| OAuth2 SSO | ⚠️ Config-only (endpoints: roadmap) | ✅ | ❌ | ❌ |
-| React UI (mobile-ready) | ✅ | ✅ | ❌ | ❌ |
-| Docker one-command deploy | ✅ | ✅ | ❌ | ❌ |
-| Audit logging | ✅ | ✅ | ❌ | ❌ |
-| API key management | ✅ | ✅ | ❌ | ❌ |
-| Conversation memory | ✅ | ✅ | ✅ | ✅ |
-| Citations + highlights | ✅ | ⚠️ Basic | ⚠️ Manual | ✅ |
-
----
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -199,7 +172,7 @@ flowchart TB
 ### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/yourusername/agentic-rag-system.git
+git clone https://github.com/objectgyan/agentic-rag-system.git
 cd agentic-rag-system
 cp .env.example .env
 # Edit .env with your API keys and settings
@@ -348,7 +321,7 @@ The system automatically logs the following actions:
 ## 🎨 Frontend
 
 ### Features
-- **Responsive Design**: Works beautifully on desktop, tablet, and mobile
+- **Responsive Design**: Works on desktop, tablet, and mobile
 - **Dark/Light Mode**: System-aware theme switching
 - **Real-time Chat**: WebSocket-powered conversational UI with streaming
 - **Document Manager**: Drag-and-drop upload, progress tracking, preview
