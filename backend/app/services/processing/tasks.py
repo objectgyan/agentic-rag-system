@@ -54,10 +54,13 @@ def process_document(self, document_id: str, tenant_id: str):
 
 
 async def _process_document_async(task, document_id: str, tenant_id: str):
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from app.core.database import make_sessionmaker
 
     engine = create_async_engine(settings.database_url, pool_size=5)
-    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    # TenantSession-backed: the tenant is re-applied after each of the task's commits.
+    Session = make_sessionmaker(engine)
 
     try:
         async with Session() as db:
