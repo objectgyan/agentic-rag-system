@@ -97,3 +97,140 @@ async def test_writes_are_blocked_without_matching_context():
         await conn.execute("DELETE FROM collections WHERE tenant_id=$1", a)
         await conn.execute("DELETE FROM tenants WHERE id=$1", a)
         await conn.close()
+
+
+# --- Transaction-local tenant context through the app's session factory -------------
+#
+# The app sets the tenant with set_config(..., is_local=true), so Postgres clears it at
+# every COMMIT. These tests drive the real TenantSession/after_begin path to prove that
+# (a) the tenant survives a mid-request commit, (b) it does not survive the connection
+# going back to the pool, and (c) writes after a commit still pass WITH CHECK.
+
+
+async def _app_sessionmaker():
+    """One-connection engine + the app's session factory, so pool reuse is guaranteed."""
+    url = os.getenv("DATABASE_URL", "")
+    if not url:
+        pytest.skip("DATABASE_URL not set")
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from app.core.database import make_sessionmaker
+
+    engine = create_async_engine(url, pool_size=1, max_overflow=0)
+    try:
+        async with engine.connect():
+            pass
+    except Exception as exc:  # noqa: BLE001
+        await engine.dispose()
+        pytest.skip(f"database not reachable: {exc}")
+    return engine, make_sessionmaker(engine)
+
+
+async def _seed_two_tenants(conn, prefix):
+    a, b = uuid.uuid4(), uuid.uuid4()
+    for tid, name in ((a, "A"), (b, "B")):
+        await conn.execute(
+            "INSERT INTO tenants (id, name, slug) VALUES ($1,$2,$3)",
+            tid, f"RLS-{name}", f"{prefix}-{name.lower()}-{tid.hex[:8]}",
+        )
+        await _set_ctx(conn, tid)
+        await conn.execute(
+            "INSERT INTO collections (tenant_id, name) VALUES ($1,$2)", tid, f"{name}_secret"
+        )
+    return a, b
+
+
+async def _cleanup(conn, *tenants):
+    for tid in tenants:
+        await _set_ctx(conn, tid)
+        await conn.execute("DELETE FROM collections WHERE tenant_id=$1", tid)
+    await conn.execute("DELETE FROM tenants WHERE id = ANY($1::uuid[])", list(tenants))
+    await conn.close()
+
+
+async def test_tenant_context_survives_commit_in_same_session():
+    from sqlalchemy import text
+
+    from app.core.database import set_tenant_context
+
+    conn = await _connect()
+    a, b = await _seed_two_tenants(conn, "rls-tx")
+    engine, Session = await _app_sessionmaker()
+    try:
+        async with Session() as db:
+            await set_tenant_context(db, str(a))
+            names = set((await db.execute(text("SELECT name FROM collections"))).scalars())
+            assert names == {"A_secret"}
+
+            await db.commit()  # clears the transaction-local GUC...
+
+            # ...and after_begin re-applies it for the next transaction.
+            names = set((await db.execute(text("SELECT name FROM collections"))).scalars())
+            assert names == {"A_secret"}
+
+            await db.rollback()
+            names = set((await db.execute(text("SELECT name FROM collections"))).scalars())
+            assert names == {"A_secret"}
+    finally:
+        await engine.dispose()
+        await _cleanup(conn, a, b)
+
+
+async def test_tenant_context_does_not_leak_through_the_pool():
+    from sqlalchemy import text
+
+    from app.core.database import set_tenant_context
+
+    conn = await _connect()
+    a, b = await _seed_two_tenants(conn, "rls-pool")
+    engine, Session = await _app_sessionmaker()
+    try:
+        async with Session() as db:
+            await set_tenant_context(db, str(a))
+            assert (await db.execute(text("SELECT count(*) FROM collections"))).scalar() == 1
+            pid_first = (await db.execute(text("SELECT pg_backend_pid()"))).scalar()
+            # Commit like a write request does. (A session-level SET made inside a
+            # transaction that later rolls back is undone; one that commits sticks to
+            # the connection. That committed case is the leak this test guards.)
+            await db.commit()
+
+        # pool_size=1: the next session gets the very same Postgres connection back.
+        async with Session() as db:
+            pid_second = (await db.execute(text("SELECT pg_backend_pid()"))).scalar()
+            assert pid_second == pid_first
+            leftover = (
+                await db.execute(text("SELECT current_setting('app.current_tenant', true)"))
+            ).scalar()
+            assert leftover in (None, "")
+            assert (await db.execute(text("SELECT count(*) FROM collections"))).scalar() == 0
+    finally:
+        await engine.dispose()
+        await _cleanup(conn, a, b)
+
+
+async def test_insert_after_commit_passes_with_check():
+    from sqlalchemy import text
+
+    from app.core.database import set_tenant_context
+
+    conn = await _connect()
+    a, b = await _seed_two_tenants(conn, "rls-ins")
+    engine, Session = await _app_sessionmaker()
+    try:
+        async with Session() as db:
+            await set_tenant_context(db, str(a))
+            await db.execute(text("SELECT 1 FROM collections"))
+            await db.commit()
+
+            # A write in the *next* transaction still sees tenant A, so WITH CHECK passes.
+            await db.execute(
+                text("INSERT INTO collections (tenant_id, name) VALUES (:t, 'A_after_commit')"),
+                {"t": a},
+            )
+            await db.commit()
+
+            names = set((await db.execute(text("SELECT name FROM collections"))).scalars())
+            assert names == {"A_secret", "A_after_commit"}
+    finally:
+        await engine.dispose()
+        await _cleanup(conn, a, b)
