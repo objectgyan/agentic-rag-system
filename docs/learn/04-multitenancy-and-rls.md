@@ -37,8 +37,9 @@ USING (tenant_id::text = current_setting('app.current_tenant', true));
 Read it as: *"a row is only visible if its `tenant_id` equals the session variable
 `app.current_tenant`."*
 
-- `current_setting('app.current_tenant', true)` reads a **per-connection session variable**
-  (a "GUC"). The `true` means "return NULL if it's not set" (instead of erroring).
+- `current_setting('app.current_tenant', true)` reads a **configuration variable** on the
+  current connection (a "GUC"). The `true` means "return NULL if it's not set" (instead of
+  erroring).
 - If the variable isn't set, the comparison is `tenant_id = NULL` → `NULL` → **the row is
   hidden**. So it **fails closed** (deny by default). Good.
 
@@ -48,20 +49,69 @@ that variable. That happens in the `get_current_user` dependency:
 ```python
 # core/database.py
 async def set_tenant_context(session, tenant_id):
-    await session.execute(
-        sa_text("SELECT set_config('app.current_tenant', :tenant_id, false)"),
-        {"tenant_id": str(uuid.UUID(str(tenant_id)))},   # validated as a real UUID first
-    )
+    canonical = str(uuid.UUID(str(tenant_id)))          # validated as a real UUID first
+    session.info["tenant_id"] = canonical               # remembered for later transactions
+    if session.in_transaction():
+        await session.execute(
+            sa_text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+            {"tenant_id": canonical},
+        )
 ```
 
 > Note the value is passed as a **bound parameter**, never string-concatenated into SQL — that
 > avoids SQL injection (.NET: always use parameters, never interpolate; same rule here).
 
+### Transaction-local, re-applied on every BEGIN
+
+The third argument to `set_config` is `is_local`. It decides how long the setting lives:
+
+| `is_local` | Lives until | Risk |
+|---|---|---|
+| `false` (session) | the connection closes | A pooled connection keeps tenant A after the request commits. The next request that checks it out starts as tenant A until it sets its own context. |
+| `true` (transaction) | the next `COMMIT` / `ROLLBACK` | Nothing can leak through the pool, but the setting disappears mid-request. |
+
+We use `true`. The catch is that many paths **commit and keep querying on the same session**:
+the worker marks a document PROCESSING, commits, then writes chunks; login commits before the
+audit-log insert; the query WebSocket commits once per message. After that first commit there is
+no tenant set, so reads return zero rows and inserts fail the policy's `WITH CHECK`.
+
+So the tenant is also stored on the session, and a SQLAlchemy event applies it again at the
+start of every transaction:
+
+```python
+class TenantSession(Session):            # the sync session behind every AsyncSession
+    ...
+
+@event.listens_for(TenantSession, "after_begin")
+def _apply_tenant_on_begin(session, transaction, connection):
+    tenant_id = session.info.get("tenant_id")
+    if tenant_id:
+        connection.execute(_SET_TENANT_SQL, {"tenant_id": tenant_id})
+
+AsyncSessionLocal = make_sessionmaker(engine)   # sync_session_class=TenantSession
+```
+
+That is why `set_tenant_context` only runs the SQL itself when the session is **already** in a
+transaction: `after_begin` has fired for that one, so it must be set now. Otherwise the next
+BEGIN takes care of it. Any session that touches tenant data must come from
+`AsyncSessionLocal` / `make_sessionmaker()`. A plain `AsyncSession` has no listener and
+fails closed after its first commit.
+
+`tests/test_rls_integration.py` proves all three behaviors against live Postgres: the tenant
+survives a commit, it does **not** survive the connection going back to the pool, and an
+insert after a commit still passes `WITH CHECK`.
+
+> **Client recipe:** the same pattern works for any per-request database setting (tenant, user
+> id for audit triggers, `statement_timeout`). Make the setting transaction-local, remember it on
+> the session, and re-apply it in `after_begin`. With PgBouncer in transaction-pooling mode,
+> session-level settings aren't just leaky, they're wrong: consecutive transactions can run on
+> different server connections. So this pattern is the only one that works there.
+
 ```mermaid
 sequenceDiagram
     participant H as Handler (get_current_user)
     participant DB as Postgres
-    H->>DB: SET app.current_tenant = 'tenant-A'
+    H->>DB: SET LOCAL app.current_tenant = 'tenant-A' (each transaction)
     H->>DB: SELECT * FROM documents
     Note over DB: RLS rewrites it to<br/>... WHERE tenant_id = 'tenant-A'
     DB-->>H: only tenant-A rows

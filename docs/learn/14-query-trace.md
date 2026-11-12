@@ -47,7 +47,8 @@ middleware sets state but does *not* authenticate** — it's a hint, not a gate.
 ## 2. The dependency sets RLS context (the real gate)
 
 The `get_current_user` dependency re-validates the token, loads the `User`, and calls
-`set_tenant_context`, which runs `SELECT set_config('app.current_tenant', '<uuid>', false)`. From
+`set_tenant_context`, which runs `SELECT set_config('app.current_tenant', '<uuid>', true)` (transaction-local,
+re-applied at the start of each transaction — see [04](04-multitenancy-and-rls.md)). From
 here on, **every SQL query is automatically scoped to this tenant by Postgres Row-Level Security** —
 the app literally cannot read another tenant's `chunks`. This is why any data route *must* depend on
 `get_current_user`: without it, RLS context is never set.
