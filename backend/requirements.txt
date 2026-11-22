@@ -34,7 +34,7 @@ httpx==0.28.1
 
 # --- Document extraction (these parse untrusted uploads: keep them current) ---
 numpy==1.26.4
-pandas==2.2.0
+pandas==3.1.0
 pypdf==6.21.4
 python-docx==1.2.0
 openpyxl==3.1.5
